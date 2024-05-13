@@ -1,7 +1,3 @@
-// @Description: Pinger Library for go
-// @File:  main.go
-// @Author: github.com/farhansabbir
-// @Date: 2024-05-12 22:28
 package main
 
 import (
@@ -12,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	devnutils "github.com/farhansabbir/goping/netutils"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 )
@@ -24,7 +21,7 @@ var (
 )
 
 func main() {
-	pinger := NewPinger("www.google.com", 10)
+	pinger := devnutils.NewPinger("google.com", 10)
 	fmt.Println(pinger.ToString())
 }
 
