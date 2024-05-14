@@ -21,7 +21,7 @@ var (
 )
 
 func main() {
-	pinger := devnutils.NewPinger("google.com", 10)
+	pinger, _ := devnutils.NewPingerNameResolved("google.com", 1, false, 10)
 	fmt.Println(pinger.ToString())
 }
 

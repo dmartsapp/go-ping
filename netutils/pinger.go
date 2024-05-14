@@ -2,36 +2,101 @@ package devnutils
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net"
+	"strings"
+	"sync"
 	"time"
-
-	lib "github.com/farhansabbir/goping/lib"
 )
 
-func NewPinger(destination_name string, resolvetimeout int) *lib.Pinger {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(resolvetimeout))
-	start := time.Now()
-	addr, err := net.DefaultResolver.LookupIPAddr(ctx, destination_name)
-	if err != nil {
-		log.Fatal("Unable to resolve destination name")
+type Stats struct {
+	Sent        int           `json:"sent"`
+	Received    int           `json:"received"`
+	Loss        int           `json:"loss"`
+	Min         time.Duration `json:"min"`
+	Max         time.Duration `json:"max"`
+	Avg         float64       `json:"avg"`
+	StdDev      float64       `json:"stddev"`
+	ResolveTime time.Duration `json:"resolve_time_ms"`
+}
+
+type Pinger struct {
+	Destination        *[]net.IPAddr `json:"destination"`
+	TTL                int           `json:"ttl"`
+	NameResolveTimeout int           `json:"name_resolve_timeout"`
+	Payload            string        `json:"payload"`
+	Count              int           `json:"ping_count"`
+	ResponsesReceived  map[int]bool  `json:"response_received"`
+	Stats              *Stats        `json:"stats"`
+	IsSequential       bool          `json:"is_sequential_ping"`
+}
+
+var (
+	pinger_channel chan *Pinger = make(chan *Pinger, 100)
+	// pinger_mutex   sync.Mutex
+	pinger_wg sync.WaitGroup
+	pingers   []*Pinger
+)
+
+func (p *Pinger) ToString() string {
+	if str, err := json.Marshal(p); err != nil {
+		log.Fatal(err)
+		return err.Error()
+	} else {
+		return string(str)
 	}
+}
+
+func (pinger *Pinger) SetPingerPayloadSize(payload_size int) {
+	pinger.Payload = strings.Repeat("d", payload_size)
+}
+
+func (pinger *Pinger) ResolveName(destination string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(pinger.NameResolveTimeout))
 	defer cancel()
-	return &lib.Pinger{
-		Destination:        &addr,
+	start := time.Now()
+	addr, err := net.DefaultResolver.LookupIPAddr(ctx, destination)
+	if err != nil {
+		return err
+	}
+	pinger.Destination = &addr
+	pinger.Stats = &Stats{ResolveTime: time.Duration(time.Since(start).Milliseconds())}
+	return nil
+}
+
+func (pinger *Pinger) Ping(pinger_wg sync.WaitGroup, pinger_channel chan *Pinger) {
+	defer pinger_wg.Done()
+	time.Sleep(time.Second)
+	pinger_channel <- pinger
+}
+
+func NewPinger(resolvetimeout int, issequential bool, ping_count int) *Pinger {
+	return &Pinger{
+		Destination:        nil,
 		NameResolveTimeout: resolvetimeout,
-		ResponseReceived:   make(map[int]bool, 100),
-		Count:              4,
+		ResponsesReceived:  make(map[int]bool, ping_count),
+		Count:              ping_count,
 		Payload:            "devn",
-		Stats: &lib.Stats{
-			Sent:        0,
-			Received:    0,
-			Loss:        0,
-			Min:         0,
-			Max:         0,
-			Avg:         0,
-			StdDev:      0,
-			ResolveTime: time.Duration(time.Since(start).Milliseconds()),
-		},
+		IsSequential:       issequential,
+		Stats:              nil,
+	}
+}
+
+func NewPingerNameResolved(destination string, resolvetimeout int, issequential bool, ping_count int) (*Pinger, error) {
+	pinger := NewPinger(resolvetimeout, issequential, ping_count)
+	if err := (pinger).ResolveName(destination); err != nil {
+		return nil, err
+	} else {
+		return pinger, nil
+	}
+}
+
+func initializePingerThreadPool(pinger Pinger) {
+	for i := 0; i < pinger.Count; i++ {
+		pinger_wg.Add(1)
+		go func(i int) {
+
+		}(i)
 	}
 }
