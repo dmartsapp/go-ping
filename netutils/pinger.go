@@ -33,10 +33,7 @@ type Pinger struct {
 }
 
 var (
-	pinger_channel chan *Pinger = make(chan *Pinger, 100)
-	// pinger_mutex   sync.Mutex
-	pinger_wg sync.WaitGroup
-	pingers   []*Pinger
+// pinger_wg sync.WaitGroup
 )
 
 func (p *Pinger) ToString() string {
@@ -65,7 +62,7 @@ func (pinger *Pinger) ResolveName(destination string) error {
 	return nil
 }
 
-func (pinger *Pinger) Ping(pinger_wg sync.WaitGroup, pinger_channel chan *Pinger) {
+func (pinger *Pinger) Ping(pinger_wg *sync.WaitGroup, pinger_channel chan *Pinger) {
 	defer pinger_wg.Done()
 	time.Sleep(time.Second)
 	pinger_channel <- pinger
@@ -89,14 +86,5 @@ func NewPingerNameResolved(destination string, resolvetimeout int, issequential 
 		return nil, err
 	} else {
 		return pinger, nil
-	}
-}
-
-func initializePingerThreadPool(pinger Pinger) {
-	for i := 0; i < pinger.Count; i++ {
-		pinger_wg.Add(1)
-		go func(i int) {
-
-		}(i)
 	}
 }
