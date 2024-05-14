@@ -21,8 +21,12 @@ var (
 )
 
 func main() {
-	pinger, _ := devnutils.NewPingerNameResolved("google.com", 1, false, 10)
-	fmt.Println(pinger.ToString())
+	if pinger, err := devnutils.NewPingerNameResolved("google.com", 1000, false, 10, 5); err != nil {
+		fmt.Println(err)
+		return
+	} else {
+		fmt.Println(pinger.ToString())
+	}
 }
 
 func Ping(dst *net.IPAddr, payload_size int, options ...map[string]int) (*net.IPAddr, time.Duration, error) {

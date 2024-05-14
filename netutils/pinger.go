@@ -24,7 +24,7 @@ type Stats struct {
 type Pinger struct {
 	Destination        *[]net.IPAddr `json:"destination"`
 	TTL                int           `json:"ttl"`
-	NameResolveTimeout int           `json:"name_resolve_timeout"`
+	NameResolveTimeout int           `json:"name_resolve_timeout_ms"`
 	Payload            string        `json:"payload"`
 	Count              int           `json:"ping_count"`
 	ResponsesReceived  map[int]bool  `json:"response_received"`
@@ -50,7 +50,7 @@ func (pinger *Pinger) SetPingerPayloadSize(payload_size int) {
 }
 
 func (pinger *Pinger) ResolveName(destination string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(pinger.NameResolveTimeout))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(pinger.NameResolveTimeout))
 	defer cancel()
 	start := time.Now()
 	addr, err := net.DefaultResolver.LookupIPAddr(ctx, destination)
@@ -74,14 +74,15 @@ func NewPinger(resolvetimeout int, issequential bool, ping_count int) *Pinger {
 		NameResolveTimeout: resolvetimeout,
 		ResponsesReceived:  make(map[int]bool, ping_count),
 		Count:              ping_count,
-		Payload:            "devn",
+		Payload:            "d",
 		IsSequential:       issequential,
 		Stats:              nil,
 	}
 }
 
-func NewPingerNameResolved(destination string, resolvetimeout int, issequential bool, ping_count int) (*Pinger, error) {
+func NewPingerNameResolved(destination string, resolvetimeout int, issequential bool, ping_count int, payload_size int) (*Pinger, error) {
 	pinger := NewPinger(resolvetimeout, issequential, ping_count)
+	pinger.SetPingerPayloadSize(payload_size)
 	if err := (pinger).ResolveName(destination); err != nil {
 		return nil, err
 	} else {
