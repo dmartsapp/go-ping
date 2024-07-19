@@ -1,4 +1,4 @@
-package devnutils
+package netutils
 
 import (
 	"context"
@@ -6,35 +6,78 @@ import (
 	"log"
 	"net"
 	"strings"
-	"sync"
 	"time"
 )
 
+type ICMPPacket struct {
+	Destination     *net.IPAddr `json:"destination"`
+	PayloadSize     int         `json:"payload_size"`
+	Sequence        int         `json:"sequence_number"`
+	SentDateTime    time.Time   `json:"sent_datetime"`
+	ReceiveDateTime time.Time   `json:"receive_datetime"`
+}
 type Stats struct {
-	Sent        int           `json:"sent"`
-	Received    int           `json:"received"`
-	Loss        int           `json:"loss"`
-	Min         time.Duration `json:"min"`
-	Max         time.Duration `json:"max"`
-	Avg         float64       `json:"avg"`
-	StdDev      float64       `json:"stddev"`
-	ResolveTime time.Duration `json:"resolve_time_ms"`
+	Packets         []ICMPPacket  `json:"icmp_packets"`
+	Loss            int           `json:"loss"`
+	Min             time.Duration `json:"min"`
+	Max             time.Duration `json:"max"`
+	Avg             float64       `json:"avg"`
+	StdDev          float64       `json:"stddev"`
+	ResolveTime     time.Duration `json:"resolve_time_ms"`
+	ResolveTimedOut bool          `json:"is_resolve_timed_out"`
 }
 
 type Pinger struct {
-	Destination        *[]net.IPAddr `json:"destination"`
-	TTL                int           `json:"ttl"`
-	NameResolveTimeout int           `json:"name_resolve_timeout_ms"`
-	Payload            string        `json:"payload"`
-	Count              int           `json:"ping_count"`
-	ResponsesReceived  map[int]bool  `json:"response_received"`
-	Stats              *Stats        `json:"stats"`
-	IsSequential       bool          `json:"is_sequential_ping"`
+	DestinationStr     string    `json:"destination"`
+	Destination        *[]net.IP `json:"destination_ip_addresses"`
+	TTL                int       `json:"ttl"`
+	NameResolveTimeout int       `json:"name_resolve_timeout_ms"`
+	Payload            string    `json:"payload"`
+	Count              int       `json:"ping_count"`
+	Stats              *Stats    `json:"stats"`
+	IsSequential       bool      `json:"is_sequential_ping"`
 }
 
 var (
 // pinger_wg sync.WaitGroup
 )
+
+const (
+	_DEFAULT_COUNT   = 4
+	_DEFAULT_NETWORK = "ip4"
+)
+
+func NewPinger(destination string) *Pinger {
+	pinger := Pinger{
+		DestinationStr:     destination,
+		Payload:            strings.Repeat("d", _DEFAULT_COUNT),
+		Count:              _DEFAULT_COUNT,
+		Stats:              &Stats{},
+		IsSequential:       true,
+		NameResolveTimeout: 5000,
+	}
+
+	return &pinger
+}
+
+func (pinger *Pinger) Ping() error {
+	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pinger *Pinger) EnableParallelPing() {
+	pinger.IsSequential = false
+}
+
+func (pinger *Pinger) SetPingerPayloadSize(payload_size int) {
+	pinger.Payload = strings.Repeat("d", payload_size)
+}
+
+func (pinger *Pinger) SetPingCount(count int) {
+	pinger.Count = count
+}
 
 func (p *Pinger) ToString() string {
 	if str, err := json.Marshal(p); err != nil {
@@ -45,47 +88,19 @@ func (p *Pinger) ToString() string {
 	}
 }
 
-func (pinger *Pinger) SetPingerPayloadSize(payload_size int) {
-	pinger.Payload = strings.Repeat("d", payload_size)
-}
-
-func (pinger *Pinger) ResolveName(destination string) error {
+func (pinger *Pinger) resolveName(destination string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(pinger.NameResolveTimeout))
 	defer cancel()
 	start := time.Now()
-	addr, err := net.DefaultResolver.LookupIPAddr(ctx, destination)
+	addr, err := net.DefaultResolver.LookupIP(ctx, _DEFAULT_NETWORK, destination)
 	if err != nil {
+		pinger.Stats = &Stats{
+			ResolveTime:     time.Duration(time.Since(start).Milliseconds()),
+			ResolveTimedOut: true,
+		}
 		return err
 	}
 	pinger.Destination = &addr
-	pinger.Stats = &Stats{ResolveTime: time.Duration(time.Since(start).Milliseconds())}
+	pinger.Stats = &Stats{ResolveTime: time.Duration(time.Since(start).Milliseconds()), ResolveTimedOut: false}
 	return nil
-}
-
-func (pinger *Pinger) Ping(pinger_wg *sync.WaitGroup, pinger_channel chan *Pinger) {
-	defer pinger_wg.Done()
-	time.Sleep(time.Second)
-	pinger_channel <- pinger
-}
-
-func NewPinger(resolvetimeout int, issequential bool, ping_count int) *Pinger {
-	return &Pinger{
-		Destination:        nil,
-		NameResolveTimeout: resolvetimeout,
-		ResponsesReceived:  make(map[int]bool, ping_count),
-		Count:              ping_count,
-		Payload:            "d",
-		IsSequential:       issequential,
-		Stats:              nil,
-	}
-}
-
-func NewPingerNameResolved(destination string, resolvetimeout int, issequential bool, ping_count int, payload_size int) (*Pinger, error) {
-	pinger := NewPinger(resolvetimeout, issequential, ping_count)
-	pinger.SetPingerPayloadSize(payload_size)
-	if err := (pinger).ResolveName(destination); err != nil {
-		return nil, err
-	} else {
-		return pinger, nil
-	}
 }

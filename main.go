@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	devnutils "github.com/farhansabbir/goping/netutils"
+	"github.com/farhansabbir/goping/netutils"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 )
@@ -21,12 +21,11 @@ var (
 )
 
 func main() {
-	if pinger, err := devnutils.NewPingerNameResolved("google.com", 1000, false, 10, 5); err != nil {
-		fmt.Println(err)
-		return
-	} else {
-		fmt.Println(pinger.ToString())
-	}
+
+	pinger := netutils.NewPinger("google.com")
+	fmt.Println(pinger.Ping())
+	fmt.Println(pinger.ToString())
+
 }
 
 func Ping(dst *net.IPAddr, payload_size int, options ...map[string]int) (*net.IPAddr, time.Duration, error) {
