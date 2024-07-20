@@ -23,8 +23,10 @@ var (
 func main() {
 
 	pinger := netutils.NewPinger("home435nas.local")
+
 	pinger.Ping()
 	fmt.Println(pinger)
+	// fmt.Println([]byte(strconv.Itoa(int(time.Now().UnixMicro()))))
 
 }
 
