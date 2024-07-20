@@ -22,9 +22,9 @@ type ICMPPacket struct {
 type Stats struct {
 	Packets         []ICMPPacket  `json:"icmp_packets"`
 	Loss            int           `json:"loss"`
-	Min             time.Duration `json:"min"`
-	Max             time.Duration `json:"max"`
-	Avg             float64       `json:"avg"`
+	Min             time.Duration `json:"min_ms"`
+	Max             time.Duration `json:"max_ms"`
+	Avg             float64       `json:"avg_ms"`
 	StdDev          float64       `json:"stddev"`
 	ResolveTime     time.Duration `json:"resolve_time_ms"`
 	ResolveTimedOut bool          `json:"is_resolve_timed_out"`
@@ -215,5 +215,6 @@ func (pinger *Pinger) sendicmp(ip net.IP, seq int) {
 		PayloadSize:      len(pinger.Payload),
 		SentDateTimeUNIX: time.Now().UnixMilli(),
 	}
+	sendReq()
 	_pinger_channel <- packet
 }
