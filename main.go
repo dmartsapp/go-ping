@@ -22,9 +22,9 @@ var (
 
 func main() {
 
-	pinger := netutils.NewPinger("google.com")
-	fmt.Println(pinger.Ping())
-	fmt.Println(pinger.ToString())
+	pinger := netutils.NewPinger("home435nas.local")
+	pinger.Ping()
+	fmt.Println(pinger)
 
 }
 
