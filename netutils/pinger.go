@@ -3,11 +3,12 @@ package netutils
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,8 +29,8 @@ type ICMPPacket struct {
 type Stats struct {
 	Packets         []ICMPPacket  `json:"icmp_packets"`
 	Loss            int           `json:"loss"`
-	Min             time.Duration `json:"min_ms"`
-	Max             time.Duration `json:"max_ms"`
+	Min             int           `json:"min_ms"`
+	Max             int           `json:"max_ms"`
 	Avg             float64       `json:"avg_ms"`
 	StdDev          float64       `json:"stddev"`
 	ResolveTime     time.Duration `json:"resolve_time_ms"`
@@ -54,6 +55,7 @@ type Pinger struct {
 var (
 	_pinger_wg      = sync.WaitGroup{}
 	_pinger_channel = make(chan ICMPPacket, 1)
+	_stream_channel = make((chan string))
 	// _pinger_mutux = sync.Mutex{}
 )
 
@@ -88,8 +90,29 @@ func NewPinger(destination string) *Pinger {
 }
 
 func (pinger *Pinger) MeasureStats() *Stats {
-	fmt.Println("Calculate the stats, now that pingers have stopped sending packets")
+	// fmt.Println("Calculate the stats, now that pingers have stopped sending packets")
+	if pinger.Stats.ResolveTimedOut {
+		return pinger.Stats
+	}
+	timetaken := make([]int, 0)
+	sum := 0
+	for _, packet := range pinger.Stats.Packets {
+		if packet.ErrorEncountered {
+			continue
+		}
+		sum += int(packet.ReceiveDateTimeUNIX - packet.SentDateTimeUNIX)
+		timetaken = append(timetaken, int(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX))
+	}
+	pinger.Stats.Avg = float64(sum) / float64(pinger.Count)
+	if len(timetaken) > 0 {
+		pinger.Stats.Max = slices.Max(timetaken)
+		pinger.Stats.Min = slices.Min(timetaken)
+	}
 	return pinger.Stats
+}
+
+func (pinger *Pinger) Stream() <-chan string {
+	return _stream_channel
 }
 
 func (pinger *Pinger) Ping() error {
@@ -107,6 +130,7 @@ func (pinger *Pinger) Ping() error {
 			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
 			if len(pinger.Stats.Packets) == pinger.Count {
 				close(_pinger_channel)
+				close(_stream_channel)
 			}
 		}
 	}(&_pinger_wg)
@@ -183,11 +207,16 @@ func (pinger *Pinger) SetResolveTimeout(timeout int) *Pinger {
 func (pinger *Pinger) SetPingDelayInMS(delay int) *Pinger {
 	// explicitly set ping delay. Checks for delay
 	// default is usually 1000ms as defined in _DEFAULT_PING_DELAY_MS, hence sets if delay <=0
-	if delay <= 0 {
+	if delay < 0 {
 		pinger.PingDelay = _DEFAULT_PING_DELAY_MS
 	} else {
 		pinger.PingDelay = delay
 	}
+	return pinger
+}
+
+func (pinger *Pinger) SetTTL(ttl int) *Pinger {
+	pinger.TTL = ttl
 	return pinger
 }
 
@@ -290,13 +319,14 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 		_pinger_channel <- icmppacket
 		return
 	}
-
+	_stream_channel <- "Sending request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 	if runtime.GOOS == "windows" {
 		_, err := icmpconn.WriteTo(msg_bytes, &net.IPAddr{IP: destination})
 		if err != nil {
 			icmppacket.ErrorEncountered = true
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
+			_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -307,6 +337,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 			icmppacket.ErrorEncountered = true
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
+			_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -320,6 +351,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 			icmppacket.ErrorEncountered = true
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
+			_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -328,6 +360,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 			icmppacket.ErrorEncountered = true
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
+			_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -337,6 +370,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 			icmppacket.ErrorEncountered = true
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
+			_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -346,6 +380,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 
 			if int(body[3]) == seq {
 				icmppacket.ReceiveDateTimeUNIX = time.Now().UnixMilli()
+				_stream_channel <- "Received response for request #" + strconv.Itoa(seq) + " to " + destination.String()
 				_pinger_channel <- icmppacket
 				return
 			} else { // sequence mismatch, look for another packet to match

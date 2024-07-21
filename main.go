@@ -16,12 +16,21 @@ var (
 func main() {
 
 	pinger := netutils.NewPinger("home435nas.local").
+		// pinger := netutils.NewPinger("google.com").
 		SetPingCount(10).
-		SetParallelPing(true).
-		SetPingDelayInMS(100)
+		// SetTTL(10).
+		SetPayloadSizeInBytes(3).
+		SetParallelPing(false).
+		SetPingDelayInMS(10)
 	// pinger := netutils.NewPinger("google.com")
-	// pinger.SetParallelPing(true)
+	pinger.SetParallelPing(true)
+	go func(pinger *netutils.Pinger) {
+		for data := range pinger.Stream() {
+			fmt.Println(data)
+		}
+	}(pinger)
 	pinger.Ping()
+	pinger.MeasureStats()
 	fmt.Println(pinger)
 	// fmt.Println(pinger)
 
