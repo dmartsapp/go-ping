@@ -7,9 +7,13 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 )
 
 type ICMPPacket struct {
@@ -18,6 +22,7 @@ type ICMPPacket struct {
 	Sequence            int        `json:"sequence_number"`
 	SentDateTimeUNIX    int64      `json:"sent_datetime_unix_ms"`
 	ReceiveDateTimeUNIX int64      `json:"receive_datetime_unix_ms"`
+	ErrorEncountered    bool       `json:"is_error_encountered"`
 }
 type Stats struct {
 	Packets         []ICMPPacket  `json:"icmp_packets"`
@@ -28,6 +33,7 @@ type Stats struct {
 	StdDev          float64       `json:"stddev"`
 	ResolveTime     time.Duration `json:"resolve_time_ms"`
 	ResolveTimedOut bool          `json:"is_resolve_timed_out"`
+	TotalTime       time.Duration `json:"total_time_taken_ms"`
 }
 
 type Pinger struct {
@@ -51,6 +57,7 @@ var (
 )
 
 const (
+	_DEFAULT_TTL                = 1000
 	_DEFAULT_PING_COUNT         = 4
 	_DEFAULT_PAYLOAD_SIZE       = 4
 	_DEFAULT_MTU                = 1500
@@ -59,11 +66,13 @@ const (
 	_DEFAULT_RESOLVE_TIMEOUT_MS = 5000
 	_DEFAULT_PING_DELAY_MS      = 1000
 	_DEFAULT_MAX_DELAY          = 10000
+	_DEFAULT_LISTEN_ADDRESS     = "0.0.0.0"
 )
 
 func NewPinger(destination string) *Pinger {
 	pinger := Pinger{
 		DestinationStr: destination,
+		TTL:            _DEFAULT_TTL,
 		Destination:    []net.IP{},
 		Payload:        strings.Repeat("d", _DEFAULT_PAYLOAD_SIZE),
 		Count:          _DEFAULT_PING_COUNT,
@@ -77,9 +86,16 @@ func NewPinger(destination string) *Pinger {
 	return &pinger
 }
 
+func (pinger *Pinger) MeasureStats() *Stats {
+	fmt.Println("Calculate the stats, now that pingers have stopped sending packets")
+	return pinger.Stats
+}
+
 func (pinger *Pinger) Ping() error {
+	start := time.Now()
 	// resolve the name first to populate pinger object properties
 	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
+		pinger.Stats.TotalTime = time.Since(start)
 		return err
 	}
 	_pinger_wg.Add(1)
@@ -88,8 +104,10 @@ func (pinger *Pinger) Ping() error {
 		defer wg.Done()
 		for packet := range _pinger_channel {
 			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+			if len(pinger.Stats.Packets) == pinger.Count {
+				close(_pinger_channel)
+			}
 		}
-		fmt.Println("Calculate the stats, now that pingers have stopped sending packets")
 	}(&_pinger_wg)
 
 	if pinger.IsSequential {
@@ -102,8 +120,9 @@ func (pinger *Pinger) Ping() error {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
 		}
-		close(_pinger_channel)
+		// close(_pinger_channel)
 	} else {
+
 		for seq := range pinger.Count {
 			for _, ip := range pinger.Destination {
 				_pinger_wg.Add(1)
@@ -119,13 +138,15 @@ func (pinger *Pinger) Ping() error {
 			}
 		}
 		_pinger_wg.Wait()
-		close(_pinger_channel)
+		// close(_pinger_channel)
 	}
+	pinger.Stats.TotalTime = time.Since(start)
 	return nil
 }
 
-func (pinger *Pinger) EnableParallelPing() {
-	pinger.IsSequential = false
+func (pinger *Pinger) SetParallelPing(parallel bool) {
+	// explicitly sets the ping to run in parallel
+	pinger.IsSequential = !parallel
 }
 
 func (pinger *Pinger) SetPayloadSizeInBytes(payload_size int) {
@@ -182,6 +203,16 @@ func (p *Pinger) String() string {
 	}
 }
 
+func (stats *Stats) String() string {
+	// returns json representation of the pinger object
+	if str, err := json.Marshal(stats); err != nil {
+		log.Fatal(err)
+		return err.Error()
+	} else {
+		return string(str)
+	}
+}
+
 func (pinger *Pinger) resolveName(destination string) error {
 	// method resolves the name against a timeout defined in ResolveTimeout
 	// also populates basic properties like
@@ -205,16 +236,104 @@ func (pinger *Pinger) resolveName(destination string) error {
 	return nil
 }
 
-func (pinger *Pinger) sendicmp(ip net.IP, seq int) {
+func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 	time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-	packet := ICMPPacket{
+	icmppacket := ICMPPacket{
 		Destination: net.IPAddr{
-			IP: ip,
+			IP: destination,
 		},
 		Sequence:         seq,
 		PayloadSize:      len(pinger.Payload),
 		SentDateTimeUNIX: time.Now().UnixMilli(),
 	}
-	sendReq()
-	_pinger_channel <- packet
+	var icmpconn *icmp.PacketConn
+	var err error
+
+	// Start listening for icmp replies
+	if runtime.GOOS == "windows" {
+		if icmpconn, err = icmp.ListenPacket("ip4:icmp", _DEFAULT_LISTEN_ADDRESS); err != nil {
+			icmppacket.ErrorEncountered = true
+			_pinger_channel <- icmppacket
+			return
+		}
+		defer icmpconn.Close()
+	} else {
+		if icmpconn, err = icmp.ListenPacket("udp4", _DEFAULT_LISTEN_ADDRESS); err != nil {
+			icmppacket.ErrorEncountered = true
+			_pinger_channel <- icmppacket
+			return
+		}
+		defer icmpconn.Close()
+	}
+	// Make a new ICMP message
+	msg := icmp.Message{
+		Type: ipv4.ICMPTypeEcho, Code: 0,
+		Body: &icmp.Echo{
+			ID:   seq & 0xffff,
+			Seq:  seq,                    //<< uint(seq), // TODO
+			Data: []byte(pinger.Payload), // 4 bytes per char
+		},
+	}
+	msg_bytes, err := msg.Marshal(nil)
+	if err != nil {
+		icmppacket.ErrorEncountered = true
+		_pinger_channel <- icmppacket
+		return
+	}
+
+	if runtime.GOOS == "windows" {
+		_, err := icmpconn.WriteTo(msg_bytes, &net.IPAddr{IP: destination})
+		if err != nil {
+			icmppacket.ErrorEncountered = true
+			_pinger_channel <- icmppacket
+			return
+		}
+	} else {
+		_, err = icmpconn.WriteTo(msg_bytes, &net.UDPAddr{IP: destination})
+		icmppacket.SentDateTimeUNIX = time.Now().UnixMilli()
+		if err != nil {
+			icmppacket.ErrorEncountered = true
+			_pinger_channel <- icmppacket
+			return
+		}
+	}
+
+	for {
+		// Wait for a reply
+		reply := make([]byte, _DEFAULT_MTU)
+		err = icmpconn.SetReadDeadline(time.Now().Add(time.Duration(pinger.TTL) * time.Millisecond))
+		if err != nil {
+			icmppacket.ErrorEncountered = true
+			_pinger_channel <- icmppacket
+			return
+		}
+		n, _, err := icmpconn.ReadFrom(reply)
+		if err != nil {
+			icmppacket.ErrorEncountered = true
+			_pinger_channel <- icmppacket
+			return
+		}
+
+		rm, err := icmp.ParseMessage(1, reply[:n])
+		if err != nil {
+			icmppacket.ErrorEncountered = true
+			_pinger_channel <- icmppacket
+			return
+		}
+		switch rm.Type {
+		case ipv4.ICMPTypeEchoReply:
+			body, _ := rm.Body.Marshal(ipv4.ICMPTypeEchoReply.Protocol())
+
+			if int(body[3]) == seq {
+				icmppacket.ReceiveDateTimeUNIX = time.Now().UnixMilli()
+				_pinger_channel <- icmppacket
+				return
+			} else { // sequence mismatch, look for another packet to match
+				continue
+			}
+
+			// default:
+			// 	return dst, 0, fmt.Errorf("%v %+v", peer, rm.Type)
+		}
+	}
 }

@@ -1,5 +1,6 @@
-//go:build unix
-// +build unix
+//go:build !windows && (arm64 || amd64)
+// +build !windows
+// +build arm64 amd64
 
 // @Description: For UNIX
 // @File:  unix.go
