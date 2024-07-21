@@ -23,6 +23,7 @@ type ICMPPacket struct {
 	SentDateTimeUNIX    int64      `json:"sent_datetime_unix_ms"`
 	ReceiveDateTimeUNIX int64      `json:"receive_datetime_unix_ms"`
 	ErrorEncountered    bool       `json:"is_error_encountered"`
+	ErrorStr            string     `json:"error_string"`
 }
 type Stats struct {
 	Packets         []ICMPPacket  `json:"icmp_packets"`
@@ -253,6 +254,8 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 	if runtime.GOOS == "windows" {
 		if icmpconn, err = icmp.ListenPacket("ip4:icmp", _DEFAULT_LISTEN_ADDRESS); err != nil {
 			icmppacket.ErrorEncountered = true
+			pinger.Stats.Loss += 1
+			icmppacket.ErrorStr = err.Error()
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -260,6 +263,8 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 	} else {
 		if icmpconn, err = icmp.ListenPacket("udp4", _DEFAULT_LISTEN_ADDRESS); err != nil {
 			icmppacket.ErrorEncountered = true
+			pinger.Stats.Loss += 1
+			icmppacket.ErrorStr = err.Error()
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -277,6 +282,8 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 	msg_bytes, err := msg.Marshal(nil)
 	if err != nil {
 		icmppacket.ErrorEncountered = true
+		pinger.Stats.Loss += 1
+		icmppacket.ErrorStr = err.Error()
 		_pinger_channel <- icmppacket
 		return
 	}
@@ -285,6 +292,8 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 		_, err := icmpconn.WriteTo(msg_bytes, &net.IPAddr{IP: destination})
 		if err != nil {
 			icmppacket.ErrorEncountered = true
+			pinger.Stats.Loss += 1
+			icmppacket.ErrorStr = err.Error()
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -293,6 +302,8 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 		icmppacket.SentDateTimeUNIX = time.Now().UnixMilli()
 		if err != nil {
 			icmppacket.ErrorEncountered = true
+			pinger.Stats.Loss += 1
+			icmppacket.ErrorStr = err.Error()
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -304,12 +315,16 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 		err = icmpconn.SetReadDeadline(time.Now().Add(time.Duration(pinger.TTL) * time.Millisecond))
 		if err != nil {
 			icmppacket.ErrorEncountered = true
+			pinger.Stats.Loss += 1
+			icmppacket.ErrorStr = err.Error()
 			_pinger_channel <- icmppacket
 			return
 		}
 		n, _, err := icmpconn.ReadFrom(reply)
 		if err != nil {
 			icmppacket.ErrorEncountered = true
+			pinger.Stats.Loss += 1
+			icmppacket.ErrorStr = err.Error()
 			_pinger_channel <- icmppacket
 			return
 		}
@@ -317,6 +332,8 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 		rm, err := icmp.ParseMessage(1, reply[:n])
 		if err != nil {
 			icmppacket.ErrorEncountered = true
+			pinger.Stats.Loss += 1
+			icmppacket.ErrorStr = err.Error()
 			_pinger_channel <- icmppacket
 			return
 		}

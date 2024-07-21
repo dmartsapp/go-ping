@@ -1,7 +1,7 @@
 {
-    "destination": "home435nas.local",
+    "destination": "192.168.50.123",
     "destination_ip_addresses": [
-        "192.168.50.174"
+        "192.168.50.123"
     ],
     "ttl": 1000,
     "resolve_timeout_ms": 5000,
@@ -11,123 +11,123 @@
         "icmp_packets": [
             {
                 "destination": {
-                    "IP": "192.168.50.174",
-                    "Zone": ""
-                },
-                "payload_size": 4,
-                "sequence_number": 0,
-                "sent_datetime_unix_ms": 1721544276167,
-                "receive_datetime_unix_ms": 1721544276169,
-                "is_error_encountered": false
-            },
-            {
-                "destination": {
-                    "IP": "192.168.50.174",
-                    "Zone": ""
-                },
-                "payload_size": 4,
-                "sequence_number": 1,
-                "sent_datetime_unix_ms": 1721544276268,
-                "receive_datetime_unix_ms": 1721544276275,
-                "is_error_encountered": false
-            },
-            {
-                "destination": {
-                    "IP": "192.168.50.174",
-                    "Zone": ""
-                },
-                "payload_size": 4,
-                "sequence_number": 2,
-                "sent_datetime_unix_ms": 1721544276369,
-                "receive_datetime_unix_ms": 1721544276372,
-                "is_error_encountered": false
-            },
-            {
-                "destination": {
-                    "IP": "192.168.50.174",
-                    "Zone": ""
-                },
-                "payload_size": 4,
-                "sequence_number": 3,
-                "sent_datetime_unix_ms": 1721544276471,
-                "receive_datetime_unix_ms": 1721544276473,
-                "is_error_encountered": false
-            },
-            {
-                "destination": {
-                    "IP": "192.168.50.174",
-                    "Zone": ""
-                },
-                "payload_size": 4,
-                "sequence_number": 4,
-                "sent_datetime_unix_ms": 1721544276572,
-                "receive_datetime_unix_ms": 1721544276575,
-                "is_error_encountered": false
-            },
-            {
-                "destination": {
-                    "IP": "192.168.50.174",
+                    "IP": "192.168.50.123",
                     "Zone": ""
                 },
                 "payload_size": 4,
                 "sequence_number": 5,
-                "sent_datetime_unix_ms": 1721544276673,
-                "receive_datetime_unix_ms": 1721544276676,
-                "is_error_encountered": false
+                "sent_datetime_unix_ms": 1721548804917,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
             },
             {
                 "destination": {
-                    "IP": "192.168.50.174",
+                    "IP": "192.168.50.123",
                     "Zone": ""
                 },
                 "payload_size": 4,
                 "sequence_number": 6,
-                "sent_datetime_unix_ms": 1721544276773,
-                "receive_datetime_unix_ms": 1721544276776,
-                "is_error_encountered": false
+                "sent_datetime_unix_ms": 1721548805017,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
             },
             {
                 "destination": {
-                    "IP": "192.168.50.174",
+                    "IP": "192.168.50.123",
                     "Zone": ""
                 },
                 "payload_size": 4,
                 "sequence_number": 7,
-                "sent_datetime_unix_ms": 1721544276874,
-                "receive_datetime_unix_ms": 1721544276877,
-                "is_error_encountered": false
+                "sent_datetime_unix_ms": 1721548805119,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
             },
             {
                 "destination": {
-                    "IP": "192.168.50.174",
+                    "IP": "192.168.50.123",
                     "Zone": ""
                 },
                 "payload_size": 4,
                 "sequence_number": 8,
-                "sent_datetime_unix_ms": 1721544276976,
-                "receive_datetime_unix_ms": 1721544276980,
-                "is_error_encountered": false
+                "sent_datetime_unix_ms": 1721548805220,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
             },
             {
                 "destination": {
-                    "IP": "192.168.50.174",
+                    "IP": "192.168.50.123",
                     "Zone": ""
                 },
                 "payload_size": 4,
                 "sequence_number": 9,
-                "sent_datetime_unix_ms": 1721544277077,
-                "receive_datetime_unix_ms": 1721544277093,
-                "is_error_encountered": false
+                "sent_datetime_unix_ms": 1721548805321,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
+            },
+            {
+                "destination": {
+                    "IP": "192.168.50.123",
+                    "Zone": ""
+                },
+                "payload_size": 4,
+                "sequence_number": 0,
+                "sent_datetime_unix_ms": 1721548804410,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
+            },
+            {
+                "destination": {
+                    "IP": "192.168.50.123",
+                    "Zone": ""
+                },
+                "payload_size": 4,
+                "sequence_number": 1,
+                "sent_datetime_unix_ms": 1721548804511,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
+            },
+            {
+                "destination": {
+                    "IP": "192.168.50.123",
+                    "Zone": ""
+                },
+                "payload_size": 4,
+                "sequence_number": 2,
+                "sent_datetime_unix_ms": 1721548804612,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
+            },
+            {
+                "destination": {
+                    "IP": "192.168.50.123",
+                    "Zone": ""
+                },
+                "payload_size": 4,
+                "sequence_number": 3,
+                "sent_datetime_unix_ms": 1721548804714,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
+            },
+            {
+                "destination": {
+                    "IP": "192.168.50.123",
+                    "Zone": ""
+                },
+                "payload_size": 4,
+                "sequence_number": 4,
+                "sent_datetime_unix_ms": 1721548804816,
+                "receive_datetime_unix_ms": 0,
+                "is_error_encountered": true
             }
         ],
-        "loss": 0,
+        "loss": 10,
         "min_ms": 0,
         "max_ms": 0,
         "avg_ms": 0,
         "stddev": 0,
-        "resolve_time_ms": 1,
+        "resolve_time_ms": 0,
         "is_resolve_timed_out": false,
-        "total_time_taken_ms": 1030593667
+        "total_time_taken_ms": 1507909041
     },
     "is_sequential_ping": false,
     "ping_delay_ms": 100,
