@@ -15,11 +15,12 @@ var (
 
 func main() {
 
-	pinger := netutils.NewPinger("192.168.50.123")
+	pinger := netutils.NewPinger("home435nas.local").
+		SetPingCount(10).
+		SetParallelPing(true).
+		SetPingDelayInMS(100)
 	// pinger := netutils.NewPinger("google.com")
-	pinger.SetPingCount(10)
-	pinger.SetPingDelayInMS(100)
-	pinger.SetParallelPing(true)
+	// pinger.SetParallelPing(true)
 	pinger.Ping()
 	fmt.Println(pinger)
 	// fmt.Println(pinger)

@@ -145,18 +145,20 @@ func (pinger *Pinger) Ping() error {
 	return nil
 }
 
-func (pinger *Pinger) SetParallelPing(parallel bool) {
+func (pinger *Pinger) SetParallelPing(parallel bool) *Pinger {
 	// explicitly sets the ping to run in parallel
 	pinger.IsSequential = !parallel
+	return pinger
 }
 
-func (pinger *Pinger) SetPayloadSizeInBytes(payload_size int) {
+func (pinger *Pinger) SetPayloadSizeInBytes(payload_size int) *Pinger {
 	// explicitly sets the size of the ping requests within boundary of _DEFAULT_MAX_PAYLOAD_SIZE
 	// returns nil
 	pinger.Payload = strings.Repeat("d", payload_size%_DEFAULT_MAX_PAYLOAD_SIZE)
+	return pinger
 }
 
-func (pinger *Pinger) SetPingCount(count int) {
+func (pinger *Pinger) SetPingCount(count int) *Pinger {
 	// explicitly set ping count. Checks if set below 0, then converts to absolute
 	// default is usually 4 as defined in _DEFAULT_PING_COUNT
 	// returns nil
@@ -164,28 +166,29 @@ func (pinger *Pinger) SetPingCount(count int) {
 		count *= -1
 	}
 	pinger.Count = count
+	return pinger
 }
 
-func (pinger *Pinger) SetResolveTimeout(timeout int) error {
+func (pinger *Pinger) SetResolveTimeout(timeout int) *Pinger {
 	// explicitly set ping delay. Checks for timeout less than 0ms
-	// default is usually 5000ms as defined in _DEFAULT_RESOLVE_TIMEOUT_MS
-	// returns error if timeout < 0
+	// default is usually 5000ms as defined in _DEFAULT_RESOLVE_TIMEOUT_MS, hence sets if timeout <0
 	if timeout < 0 {
-		return fmt.Errorf("timeout must not be less than 0ms")
+		pinger.ResolveTimeout = _DEFAULT_RESOLVE_TIMEOUT_MS
+	} else {
+		pinger.ResolveTimeout = timeout
 	}
-	pinger.ResolveTimeout = timeout
-	return nil
+	return pinger
 }
 
-func (pinger *Pinger) SetPingDelayInMS(delay int) error {
+func (pinger *Pinger) SetPingDelayInMS(delay int) *Pinger {
 	// explicitly set ping delay. Checks for delay
-	// default is usually 1000ms as defined in _DEFAULT_PING_DELAY_MS
-	// returns error if delay <= 0
+	// default is usually 1000ms as defined in _DEFAULT_PING_DELAY_MS, hence sets if delay <=0
 	if delay <= 0 {
-		return fmt.Errorf("delay cannot be less than 1ms. Set randomized ping delay to achieve delay between pings")
+		pinger.PingDelay = _DEFAULT_PING_DELAY_MS
+	} else {
+		pinger.PingDelay = delay
 	}
-	pinger.PingDelay = delay
-	return nil
+	return pinger
 }
 
 func (pinger *Pinger) SetRandomizedPingDelay(random bool) {
