@@ -260,6 +260,7 @@ func (pinger *Pinger) resolveName(destination string) error {
 	if err != nil {
 		pinger.Stats.ResolveTime = time.Duration(time.Since(start).Milliseconds())
 		pinger.Stats.ResolveTimedOut = true
+		_stream_channel <- "Unable to resolve for " + destination + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 		return err
 	}
 	pinger.Destination = addr
@@ -319,7 +320,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 		_pinger_channel <- icmppacket
 		return
 	}
-	_stream_channel <- "Sending request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
+	// _stream_channel <- "Sending request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 	if runtime.GOOS == "windows" {
 		_, err := icmpconn.WriteTo(msg_bytes, &net.IPAddr{IP: destination})
 		if err != nil {
@@ -380,7 +381,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 
 			if int(body[3]) == seq {
 				icmppacket.ReceiveDateTimeUNIX = time.Now().UnixMilli()
-				_stream_channel <- "Received response for request #" + strconv.Itoa(seq) + " to " + destination.String()
+				_stream_channel <- time.Now().Local().Format("12/12/2014 18:23:21") + ": Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
 				_pinger_channel <- icmppacket
 				return
 			} else { // sequence mismatch, look for another packet to match
