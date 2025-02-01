@@ -3,7 +3,6 @@ package netutils
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -150,9 +149,9 @@ func (pinger *Pinger) Ping() error {
 		}
 		// close(_pinger_channel)
 	} else {
-		if pinger.PingDelay > 0 {
-			fmt.Println("Ping delay is not set to 0, parallel run effect may be lost")
-		}
+		// if pinger.PingDelay > 0 {
+		// 	fmt.Println("Ping delay is not set to 0, parallel run effect may be lost")
+		// }
 		for seq := range pinger.Count {
 			for _, ip := range pinger.Destination {
 				_pinger_wg.Add(1)
@@ -390,7 +389,8 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 
 			if int(body[3]) == seq {
 				icmppacket.ReceiveDateTimeUNIX = time.Now().UnixMilli()
-				_stream_channel <- time.Now().Local().Format("12/12/2014 18:23:21") + ": Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
+				// _stream_channel <- time.Now().Local().Format("12/12/2014 18:23:21") + ": Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
+				_stream_channel <- "Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
 				_pinger_channel <- icmppacket
 				return
 			} else { // sequence mismatch, look for another packet to match

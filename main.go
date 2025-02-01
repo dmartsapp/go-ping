@@ -24,11 +24,11 @@ func main() {
 		SetParallelPing(true)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)
-	// go func(pinger *netutils.Pinger) {
-	// 	for data := range pinger.Stream() {
-	// 		fmt.Println(data)
-	// 	}
-	// }(pinger)
+	go func(pinger *netutils.Pinger) {
+		for data := range pinger.Stream() {
+			fmt.Println(data)
+		}
+	}(pinger)
 	pinger.Ping()
 	// pinger.MeasureStats()
 	// fmt.Println(pinger)
