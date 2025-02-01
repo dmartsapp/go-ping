@@ -54,7 +54,7 @@ type Pinger struct {
 
 var (
 	_pinger_wg      = sync.WaitGroup{}
-	_pinger_channel = make(chan ICMPPacket, 1)
+	_pinger_channel = make(chan ICMPPacket, 1000)
 	_stream_channel = make((chan string), 1000)
 	_is_ping_done   = false
 	// _pinger_mutux = sync.Mutex{}
@@ -123,19 +123,20 @@ func (pinger *Pinger) Ping() error {
 		pinger.Stats.TotalTime = time.Since(start)
 		return err
 	}
-	_pinger_wg.Add(1)
-	// start monitoring the pinger channel for incoming data from completed pings
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		for packet := range _pinger_channel {
-			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
-			if len(pinger.Stats.Packets) == pinger.Count {
-				close(_pinger_channel)
-				close(_stream_channel)
-				_is_ping_done = true
-			}
-		}
-	}(&_pinger_wg)
+	// _pinger_wg.Add(1)
+	// // start monitoring the pinger channel for incoming data from completed pings
+	// go func(wg *sync.WaitGroup) {
+	// 	defer wg.Done()
+	// 	for packet := range _pinger_channel {
+	// 		pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+	// 		fmt.Println(pinger.Destination)
+	// 		// if len(pinger.Stats.Packets) == pinger.Count {
+	// 		// 	close(_pinger_channel)
+	// 		// 	close(_stream_channel)
+	// 		// 	_is_ping_done = true
+	// 		// }
+	// 	}
+	// }(&_pinger_wg)
 
 	if pinger.IsSequential {
 		for seq := range pinger.Count {
@@ -166,9 +167,10 @@ func (pinger *Pinger) Ping() error {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
 		}
-		_pinger_wg.Wait()
+
 		// close(_pinger_channel)
 	}
+	_pinger_wg.Wait()
 	pinger.Stats.TotalTime = time.Since(start)
 	return nil
 }
