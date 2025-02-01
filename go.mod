@@ -1,7 +1,7 @@
 module github.com/farhansabbir/goping
 
-go 1.22.1
+go 1.23.5
 
-require golang.org/x/net v0.25.0
+require golang.org/x/net v0.34.0
 
-require golang.org/x/sys v0.20.0 // indirect
+require golang.org/x/sys v0.29.0 // indirect
