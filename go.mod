@@ -1,4 +1,4 @@
-module github.com/farhansabbir/goping
+module github.com/farhansabbir/go-ping
 
 go 1.23.5
 

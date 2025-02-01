@@ -1,7 +1,9 @@
 package main
 
 import (
-	"github.com/farhansabbir/goping/netutils"
+	"fmt"
+
+	"github.com/farhansabbir/go-ping/netutils"
 )
 
 var (
@@ -30,7 +32,7 @@ func main() {
 	pinger.Ping()
 	// pinger.MeasureStats()
 	// fmt.Println(pinger)
-	// fmt.Println(pinger)
+	fmt.Println(pinger)
 	// fmt.Println(pinger.Stats.Max)
 
 	// fmt.Println([]byte(strconv.Itoa(int(time.Now().UnixMicro()))))
