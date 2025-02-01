@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/farhansabbir/goping/netutils"
 )
 
@@ -17,22 +15,23 @@ func main() {
 
 	// pinger := netutils.NewPinger("home435nas.local").
 	pinger := netutils.NewPinger("google.com").
-		SetPingCount(10).
+		SetPingCount(20).
 		// SetTTL(10).
 		SetPayloadSizeInBytes(3).
-		SetParallelPing(false).
-		SetPingDelayInMS(1000)
+		SetPingDelayInMS(0).
+		SetParallelPing(true)
 	// pinger := netutils.NewPinger("google.com")
-	pinger.SetParallelPing(true)
-	go func(pinger *netutils.Pinger) {
-		for data := range pinger.Stream() {
-			fmt.Println(data)
-		}
-	}(pinger)
+	// pinger.SetParallelPing(true)
+	// go func(pinger *netutils.Pinger) {
+	// 	for data := range pinger.Stream() {
+	// 		fmt.Println(data)
+	// 	}
+	// }(pinger)
 	pinger.Ping()
-	pinger.MeasureStats()
-	fmt.Println(pinger)
+	// pinger.MeasureStats()
 	// fmt.Println(pinger)
+	// fmt.Println(pinger)
+	// fmt.Println(pinger.Stats.Max)
 
 	// fmt.Println([]byte(strconv.Itoa(int(time.Now().UnixMicro()))))
 

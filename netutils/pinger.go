@@ -3,6 +3,7 @@ package netutils
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -55,7 +56,8 @@ type Pinger struct {
 var (
 	_pinger_wg      = sync.WaitGroup{}
 	_pinger_channel = make(chan ICMPPacket, 1)
-	_stream_channel = make((chan string))
+	_stream_channel = make((chan string), 1000)
+	_is_ping_done   = false
 	// _pinger_mutux = sync.Mutex{}
 )
 
@@ -131,6 +133,7 @@ func (pinger *Pinger) Ping() error {
 			if len(pinger.Stats.Packets) == pinger.Count {
 				close(_pinger_channel)
 				close(_stream_channel)
+				_is_ping_done = true
 			}
 		}
 	}(&_pinger_wg)
@@ -147,7 +150,9 @@ func (pinger *Pinger) Ping() error {
 		}
 		// close(_pinger_channel)
 	} else {
-
+		if pinger.PingDelay > 0 {
+			fmt.Println("Ping delay is not set to 0, parallel run effect may be lost")
+		}
 		for seq := range pinger.Count {
 			for _, ip := range pinger.Destination {
 				_pinger_wg.Add(1)
@@ -167,6 +172,10 @@ func (pinger *Pinger) Ping() error {
 	}
 	pinger.Stats.TotalTime = time.Since(start)
 	return nil
+}
+
+func (pinger *Pinger) isPingComplete() bool {
+	return _is_ping_done
 }
 
 func (pinger *Pinger) SetParallelPing(parallel bool) *Pinger {
