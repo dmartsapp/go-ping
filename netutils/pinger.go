@@ -86,43 +86,22 @@ func NewPinger(destination string) *Pinger {
 		PingDelay:      _DEFAULT_PING_DELAY_MS,
 		MTU:            _DEFAULT_MTU,
 	}
-
+	start := time.Now()
+	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
+		pinger.Stats.TotalTime = time.Since(start)
+		return nil
+	}
+	pinger.Stats.ResolveTime = time.Since(start)
 	return &pinger
 }
 
-func (pinger *Pinger) MeasureStats() *Stats {
-	// fmt.Println("Calculate the stats, now that pingers have stopped sending packets")
-	if pinger.Stats.ResolveTimedOut {
-		return pinger.Stats
-	}
-	timetaken := make([]int, 0)
-	sum := 0
-	for _, packet := range pinger.Stats.Packets {
-		if packet.ErrorEncountered {
-			continue
-		}
-		sum += int(packet.ReceiveDateTimeUNIX - packet.SentDateTimeUNIX)
-		timetaken = append(timetaken, int(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX))
-	}
-	pinger.Stats.Avg = float64(sum) / float64(pinger.Count)
-	if len(timetaken) > 0 {
-		pinger.Stats.Max = slices.Max(timetaken)
-		pinger.Stats.Min = slices.Min(timetaken)
-	}
-	return pinger.Stats
-}
-
-func (pinger *Pinger) Stream() <-chan string {
-	return _stream_channel
-}
-
-func (pinger *Pinger) Ping() error {
+func (pinger *Pinger) PingAll() error {
 	start := time.Now()
 	// resolve the name first to populate pinger object properties
-	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
-		pinger.Stats.TotalTime = time.Since(start)
-		return err
-	}
+	// if err := pinger.resolveName(pinger.DestinationStr); err != nil {
+	// 	pinger.Stats.TotalTime = time.Since(start)
+	// 	return err
+	// }
 	// _pinger_wg.Add(1)
 	// // start monitoring the pinger channel for incoming data from completed pings
 	// go func(wg *sync.WaitGroup) {
@@ -175,8 +154,94 @@ func (pinger *Pinger) Ping() error {
 	return nil
 }
 
+func (pinger *Pinger) PingOne() error {
+	start := time.Now()
+	// resolve the name first to populate pinger object properties
+	// if err := pinger.resolveName(pinger.DestinationStr); err != nil {
+	// 	pinger.Stats.TotalTime = time.Since(start)
+	// 	return err
+	// }
+	// _pinger_wg.Add(1)
+	// // start monitoring the pinger channel for incoming data from completed pings
+	// go func(wg *sync.WaitGroup) {
+	// 	defer wg.Done()
+	// 	for packet := range _pinger_channel {
+	// 		pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+	// 		fmt.Println(pinger.Destination)
+	// 		// if len(pinger.Stats.Packets) == pinger.Count {
+	// 		// 	close(_pinger_channel)
+	// 		// 	close(_stream_channel)
+	// 		// 	_is_ping_done = true
+	// 		// }
+	// 	}
+	// }(&_pinger_wg)
+
+	if pinger.IsSequential {
+		for seq := range pinger.Count {
+			// for _, ip := range pinger.Destination {
+			{
+				pinger.sendicmp(pinger.Destination[0], seq)
+				if pinger.RandomizePingDelay {
+					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
+				}
+				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
+			}
+		}
+		// close(_pinger_channel)
+	} else {
+		// if pinger.PingDelay > 0 {
+		// 	fmt.Println("Ping delay is not set to 0, parallel run effect may be lost")
+		// }
+		for seq := range pinger.Count {
+			{
+				_pinger_wg.Add(1)
+				go func(wg *sync.WaitGroup) {
+					defer wg.Done()
+					pinger.sendicmp(pinger.Destination[0], seq)
+				}(&_pinger_wg)
+
+				if pinger.RandomizePingDelay {
+					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
+				}
+				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
+			}
+		}
+
+		// close(_pinger_channel)
+	}
+	_pinger_wg.Wait()
+	pinger.Stats.TotalTime = time.Since(start)
+	return nil
+}
+
 func (pinger *Pinger) isPingComplete() bool {
 	return _is_ping_done
+}
+
+func (pinger *Pinger) MeasureStats() *Stats {
+	// fmt.Println("Calculate the stats, now that pingers have stopped sending packets")
+	if pinger.Stats.ResolveTimedOut {
+		return pinger.Stats
+	}
+	timetaken := make([]int, 0)
+	sum := 0
+	for _, packet := range pinger.Stats.Packets {
+		if packet.ErrorEncountered {
+			continue
+		}
+		sum += int(packet.ReceiveDateTimeUNIX - packet.SentDateTimeUNIX)
+		timetaken = append(timetaken, int(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX))
+	}
+	pinger.Stats.Avg = float64(sum) / float64(pinger.Count)
+	if len(timetaken) > 0 {
+		pinger.Stats.Max = slices.Max(timetaken)
+		pinger.Stats.Min = slices.Min(timetaken)
+	}
+	return pinger.Stats
+}
+
+func (pinger *Pinger) Stream() <-chan string {
+	return _stream_channel
 }
 
 func (pinger *Pinger) SetParallelPing(parallel bool) *Pinger {
