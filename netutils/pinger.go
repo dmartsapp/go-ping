@@ -3,7 +3,6 @@ package netutils
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -239,6 +238,7 @@ func (pinger *Pinger) MeasureStats() *Stats {
 		success_counter += 1
 		sum += int(packet.ReceiveDateTimeUNIX - packet.SentDateTimeUNIX)
 		timetaken = append(timetaken, int(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX))
+		// fmt.Println(int(packet.ReceiveDateTimeUNIX - packet.SentDateTimeUNIX))
 	}
 	pinger.Stats.Avg = float64(sum) / float64(success_counter)
 	if len(timetaken) > 0 {
@@ -254,8 +254,8 @@ func (pinger *Pinger) MeasureStats() *Stats {
 		success_counter += 1
 		pinger.Stats.StdDev += (float64(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX) - pinger.Stats.Avg) * (float64(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX) - pinger.Stats.Avg)
 	}
-	fmt.Println(success_counter)
-	fmt.Println(pinger.Stats.StdDev)
+	// fmt.Println(success_counter)
+	// fmt.Println(pinger.Stats.StdDev)
 	pinger.Stats.StdDev = math.Sqrt(pinger.Stats.StdDev / float64(success_counter))
 
 	return pinger.Stats
@@ -478,7 +478,7 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 			if int(body[3]) == seq {
 				icmppacket.ReceiveDateTimeUNIX = time.Now().UnixMilli()
 				// _stream_channel <- time.Now().Local().Format("12/12/2014 18:23:21") + ": Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
-				_stream_channel <- "Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
+				_stream_channel <- "Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data in " + strconv.FormatFloat(float64(icmppacket.ReceiveDateTimeUNIX-icmppacket.SentDateTimeUNIX)/1, 'f', 0, 64) + "ms"
 				_pinger_channel <- icmppacket
 				return
 			} else { // sequence mismatch, look for another packet to match

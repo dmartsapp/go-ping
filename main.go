@@ -30,8 +30,8 @@ func main() {
 		}
 	}(pinger)
 	// pinger.PingAllWithNameResolve()
-	pinger.PingAll()
-	// pinger.PingOne()
+	// pinger.PingAll()
+	pinger.PingOne()
 	pinger.MeasureStats()
 	// fmt.Println(pinger)
 	// fmt.Println(pinger)
