@@ -17,7 +17,7 @@ func main() {
 
 	// pinger := netutils.NewPinger("home435nas.local").
 	pinger := netutils.NewPinger("microsoft.com").
-		SetPingCount(10).
+		SetPingCount(2).
 		// SetTTL(10).
 		SetPayloadSizeInBytes(3).
 		SetPingDelayInMS(100).
@@ -30,12 +30,12 @@ func main() {
 		}
 	}(pinger)
 	// pinger.PingAllWithNameResolve()
-	// pinger.PingAll()
-	pinger.PingOne()
+	pinger.PingAll()
+	// pinger.PingOne()
 	pinger.MeasureStats()
 	// fmt.Println(pinger)
+	// fmt.Println(pinger)
 	fmt.Println(pinger.Stats)
-	// fmt.Println(pinger.Stats.Max)
 
 	// fmt.Println([]byte(strconv.Itoa(int(time.Now().UnixMicro()))))
 

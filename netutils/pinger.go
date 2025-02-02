@@ -53,10 +53,10 @@ type Pinger struct {
 }
 
 var (
-	_pinger_wg      = sync.WaitGroup{}
-	_pinger_channel = make(chan ICMPPacket, 1000)
-	_stream_channel = make((chan string), 1000)
-	_is_ping_done   = false
+	_ping_producer_wg = sync.WaitGroup{}
+	_pinger_channel   = make(chan ICMPPacket, 1000)
+	_stream_channel   = make((chan string), 1000)
+	_is_ping_done     = false
 	// _pinger_mutux = sync.Mutex{}
 )
 
@@ -102,20 +102,21 @@ func (pinger *Pinger) PingAll() error {
 	// 	pinger.Stats.TotalTime = time.Since(start)
 	// 	return err
 	// }
-	// _pinger_wg.Add(1)
-	// // start monitoring the pinger channel for incoming data from completed pings
-	// go func(wg *sync.WaitGroup) {
-	// 	defer wg.Done()
-	// 	for packet := range _pinger_channel {
-	// 		pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
-	// 		fmt.Println(pinger.Destination)
-	// 		// if len(pinger.Stats.Packets) == pinger.Count {
-	// 		// 	close(_pinger_channel)
-	// 		// 	close(_stream_channel)
-	// 		// 	_is_ping_done = true
-	// 		// }
-	// 	}
-	// }(&_pinger_wg)
+	var _ping_consumer_wg sync.WaitGroup
+	_ping_consumer_wg.Add(1)
+	// start monitoring the pinger channel for incoming data from completed pings
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		for packet := range _pinger_channel {
+			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+			// fmt.Println(pinger.Destination)
+			// if len(pinger.Stats.Packets) == pinger.Count {
+			// 	close(_pinger_channel)
+			// 	close(_stream_channel)
+			// 	_is_ping_done = true
+			// }
+		}
+	}(&_ping_consumer_wg)
 
 	if pinger.IsSequential {
 		for seq := range pinger.Count {
@@ -134,11 +135,11 @@ func (pinger *Pinger) PingAll() error {
 		// }
 		for seq := range pinger.Count {
 			for _, ip := range pinger.Destination {
-				_pinger_wg.Add(1)
+				_ping_producer_wg.Add(1)
 				go func(wg *sync.WaitGroup) {
 					defer wg.Done()
 					pinger.sendicmp(ip, seq)
-				}(&_pinger_wg)
+				}(&_ping_producer_wg)
 
 				if pinger.RandomizePingDelay {
 					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
@@ -146,10 +147,11 @@ func (pinger *Pinger) PingAll() error {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
 		}
-
-		// close(_pinger_channel)
+		_ping_producer_wg.Wait()
+		close(_pinger_channel)
 	}
-	_pinger_wg.Wait()
+
+	_ping_consumer_wg.Wait()
 	pinger.Stats.TotalTime = time.Since(start)
 	return nil
 }
@@ -161,20 +163,21 @@ func (pinger *Pinger) PingOne() error {
 	// 	pinger.Stats.TotalTime = time.Since(start)
 	// 	return err
 	// }
-	// _pinger_wg.Add(1)
-	// // start monitoring the pinger channel for incoming data from completed pings
-	// go func(wg *sync.WaitGroup) {
-	// 	defer wg.Done()
-	// 	for packet := range _pinger_channel {
-	// 		pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
-	// 		fmt.Println(pinger.Destination)
-	// 		// if len(pinger.Stats.Packets) == pinger.Count {
-	// 		// 	close(_pinger_channel)
-	// 		// 	close(_stream_channel)
-	// 		// 	_is_ping_done = true
-	// 		// }
-	// 	}
-	// }(&_pinger_wg)
+	var _ping_consumer_wg sync.WaitGroup
+	_ping_consumer_wg.Add(1)
+	// start monitoring the pinger channel for incoming data from completed pings
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		for packet := range _pinger_channel {
+			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+			// fmt.Println(pinger.Destination)
+			// if len(pinger.Stats.Packets) == pinger.Count {
+			// 	close(_pinger_channel)
+			// 	close(_stream_channel)
+			// 	_is_ping_done = true
+			// }
+		}
+	}(&_ping_consumer_wg)
 
 	if pinger.IsSequential {
 		for seq := range pinger.Count {
@@ -194,11 +197,11 @@ func (pinger *Pinger) PingOne() error {
 		// }
 		for seq := range pinger.Count {
 			{
-				_pinger_wg.Add(1)
+				_ping_producer_wg.Add(1)
 				go func(wg *sync.WaitGroup) {
 					defer wg.Done()
 					pinger.sendicmp(pinger.Destination[0], seq)
-				}(&_pinger_wg)
+				}(&_ping_producer_wg)
 
 				if pinger.RandomizePingDelay {
 					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
@@ -206,10 +209,11 @@ func (pinger *Pinger) PingOne() error {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
 		}
-
-		// close(_pinger_channel)
+		_ping_producer_wg.Wait()
+		close(_pinger_channel)
 	}
-	_pinger_wg.Wait()
+	_ping_consumer_wg.Wait()
+
 	pinger.Stats.TotalTime = time.Since(start)
 	return nil
 }
@@ -237,6 +241,7 @@ func (pinger *Pinger) MeasureStats() *Stats {
 		pinger.Stats.Max = slices.Max(timetaken)
 		pinger.Stats.Min = slices.Min(timetaken)
 	}
+	
 	return pinger.Stats
 }
 
