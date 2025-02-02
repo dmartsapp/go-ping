@@ -3,7 +3,9 @@ package netutils
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"runtime"
@@ -228,20 +230,34 @@ func (pinger *Pinger) MeasureStats() *Stats {
 		return pinger.Stats
 	}
 	timetaken := make([]int, 0)
+	success_counter := 0
 	sum := 0
 	for _, packet := range pinger.Stats.Packets {
 		if packet.ErrorEncountered {
 			continue
 		}
+		success_counter += 1
 		sum += int(packet.ReceiveDateTimeUNIX - packet.SentDateTimeUNIX)
 		timetaken = append(timetaken, int(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX))
 	}
-	pinger.Stats.Avg = float64(sum) / float64(pinger.Count)
+	pinger.Stats.Avg = float64(sum) / float64(success_counter)
 	if len(timetaken) > 0 {
 		pinger.Stats.Max = slices.Max(timetaken)
 		pinger.Stats.Min = slices.Min(timetaken)
 	}
-	
+
+	success_counter = 0
+	for _, packet := range pinger.Stats.Packets {
+		if packet.ErrorEncountered {
+			continue
+		}
+		success_counter += 1
+		pinger.Stats.StdDev += (float64(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX) - pinger.Stats.Avg) * (float64(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX) - pinger.Stats.Avg)
+	}
+	fmt.Println(success_counter)
+	fmt.Println(pinger.Stats.StdDev)
+	pinger.Stats.StdDev = math.Sqrt(pinger.Stats.StdDev / float64(success_counter))
+
 	return pinger.Stats
 }
 
