@@ -114,8 +114,8 @@ func (pinger *Pinger) PingAll() error {
 			//
 			// fmt.Println(pinger.Destination)
 			if len(pinger.Stats.Packets) == pinger.Count*len(pinger.Destination) {
-				close(_pinger_channel)
-				close(_stream_channel)
+				// close(_pinger_channel)
+				// close(_stream_channel)
 				// fmt.Println(len(pinger.Stats.Packets))
 				_is_ping_done = true
 			}
