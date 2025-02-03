@@ -150,6 +150,7 @@ func (pinger *Pinger) PingAll() error {
 		}
 		_ping_producer_wg.Wait()
 		close(_pinger_channel)
+		close(_stream_channel)
 	}
 
 	_ping_consumer_wg.Wait()
@@ -212,6 +213,7 @@ func (pinger *Pinger) PingOne() error {
 		}
 		_ping_producer_wg.Wait()
 		close(_pinger_channel)
+		close(_stream_channel)
 	}
 	_ping_consumer_wg.Wait()
 
