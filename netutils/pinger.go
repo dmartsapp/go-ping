@@ -3,6 +3,7 @@ package netutils
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -110,12 +111,14 @@ func (pinger *Pinger) PingAll() error {
 		defer wg.Done()
 		for packet := range _pinger_channel {
 			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+			//
 			// fmt.Println(pinger.Destination)
-			// if len(pinger.Stats.Packets) == pinger.Count {
-			// 	close(_pinger_channel)
-			// 	close(_stream_channel)
-			// 	_is_ping_done = true
-			// }
+			if len(pinger.Stats.Packets) == pinger.Count*len(pinger.Destination) {
+				close(_pinger_channel)
+				close(_stream_channel)
+				// fmt.Println(len(pinger.Stats.Packets))
+				_is_ping_done = true
+			}
 		}
 	}(&_ping_consumer_wg)
 
@@ -148,11 +151,11 @@ func (pinger *Pinger) PingAll() error {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
 		}
-		_ping_producer_wg.Wait()
-		close(_pinger_channel)
-		close(_stream_channel)
-	}
 
+		// close(_pinger_channel)
+		// close(_stream_channel)
+	}
+	_ping_producer_wg.Wait()
 	_ping_consumer_wg.Wait()
 	pinger.Stats.TotalTime = time.Since(start)
 	return nil
@@ -172,6 +175,7 @@ func (pinger *Pinger) PingOne() error {
 		defer wg.Done()
 		for packet := range _pinger_channel {
 			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+			fmt.Println(len(pinger.Stats.Packets))
 			// fmt.Println(pinger.Destination)
 			// if len(pinger.Stats.Packets) == pinger.Count {
 			// 	close(_pinger_channel)
@@ -211,10 +215,11 @@ func (pinger *Pinger) PingOne() error {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
 		}
-		_ping_producer_wg.Wait()
-		close(_pinger_channel)
-		close(_stream_channel)
+
+		// close(_pinger_channel)
+		// close(_stream_channel)
 	}
+	_ping_producer_wg.Wait()
 	_ping_consumer_wg.Wait()
 
 	pinger.Stats.TotalTime = time.Since(start)

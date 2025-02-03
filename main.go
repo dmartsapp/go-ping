@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/farhansabbir/go-ping/netutils"
 )
@@ -20,15 +21,18 @@ func main() {
 		SetPingCount(2).
 		// SetTTL(10).
 		SetPayloadSizeInBytes(3).
-		SetPingDelayInMS(100).
-		SetParallelPing(true)
+		// SetPingDelayInMS(100).
+		SetParallelPing(false)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)
-	go func(pinger *netutils.Pinger) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func(pinger *netutils.Pinger, wg *sync.WaitGroup) {
+		defer wg.Done()
 		for data := range pinger.Stream() {
 			fmt.Println(data)
 		}
-	}(pinger)
+	}(pinger, &wg)
 	// pinger.PingAllWithNameResolve()
 	pinger.PingAll()
 	// pinger.PingOne()
