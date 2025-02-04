@@ -3,7 +3,6 @@ package netutils
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -13,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/icmp"
@@ -57,8 +57,8 @@ type Pinger struct {
 var (
 	_ping_producer_wg = sync.WaitGroup{}
 	_pinger_channel   = make(chan ICMPPacket, 1000)
-	_stream_channel   = make((chan string), 1000)
-	_is_ping_done     = false
+	_stream_channel   = make(chan string, 1000)
+	_is_ping_done     int32
 	// _pinger_mutux = sync.Mutex{}
 )
 
@@ -104,26 +104,34 @@ func (pinger *Pinger) PingAll() error {
 	// 	pinger.Stats.TotalTime = time.Since(start)
 	// 	return err
 	// }
+	var mu sync.Mutex
 	var _ping_consumer_wg sync.WaitGroup
 	_ping_consumer_wg.Add(1)
 	// start monitoring the pinger channel for incoming data from completed pings
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
 		for packet := range _pinger_channel {
+			mu.Lock()
 			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
-			//
-			// fmt.Println(pinger.Destination)
+			mu.Unlock()
+		}
+	}(&_ping_consumer_wg)
+
+	_ping_consumer_wg.Add(1)
+	// start monitoring the pinger channel for incoming data from completed pings
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		for {
 			if len(pinger.Stats.Packets) == pinger.Count*len(pinger.Destination) {
 				close(_pinger_channel)
-				// close(_stream_channel)
-				// fmt.Println(len(pinger.Stats.Packets))
-				_is_ping_done = true
+				atomic.StoreInt32(&_is_ping_done, 1) // set to true
+				break
 			}
 		}
 	}(&_ping_consumer_wg)
 
 	if pinger.IsSequential {
-		for seq := range pinger.Count {
+		for seq := 0; seq < pinger.Count; seq++ {
 			for _, ip := range pinger.Destination {
 				pinger.sendicmp(ip, seq)
 				if pinger.RandomizePingDelay {
@@ -137,13 +145,13 @@ func (pinger *Pinger) PingAll() error {
 		// if pinger.PingDelay > 0 {
 		// 	fmt.Println("Ping delay is not set to 0, parallel run effect may be lost")
 		// }
-		for seq := range pinger.Count {
+		for seq := 0; seq < pinger.Count; seq++ {
 			for _, ip := range pinger.Destination {
 				_ping_producer_wg.Add(1)
-				go func(wg *sync.WaitGroup) {
+				go func(wg *sync.WaitGroup, ip net.IP, seq int) {
 					defer wg.Done()
 					pinger.sendicmp(ip, seq)
-				}(&_ping_producer_wg)
+				}(&_ping_producer_wg, ip, seq)
 
 				if pinger.RandomizePingDelay {
 					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
@@ -162,73 +170,8 @@ func (pinger *Pinger) PingAll() error {
 	return nil
 }
 
-func (pinger *Pinger) PingOne() error {
-	start := time.Now()
-	// resolve the name first to populate pinger object properties
-	// if err := pinger.resolveName(pinger.DestinationStr); err != nil {
-	// 	pinger.Stats.TotalTime = time.Since(start)
-	// 	return err
-	// }
-	var _ping_consumer_wg sync.WaitGroup
-	_ping_consumer_wg.Add(1)
-	// start monitoring the pinger channel for incoming data from completed pings
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		for packet := range _pinger_channel {
-			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
-			fmt.Println(len(pinger.Stats.Packets))
-			// fmt.Println(pinger.Destination)
-			// if len(pinger.Stats.Packets) == pinger.Count {
-			// 	close(_pinger_channel)
-			// 	close(_stream_channel)
-			// 	_is_ping_done = true
-			// }
-		}
-	}(&_ping_consumer_wg)
-
-	if pinger.IsSequential {
-		for seq := range pinger.Count {
-			// for _, ip := range pinger.Destination {
-			{
-				pinger.sendicmp(pinger.Destination[0], seq)
-				if pinger.RandomizePingDelay {
-					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
-				}
-				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-			}
-		}
-		// close(_pinger_channel)
-	} else {
-		// if pinger.PingDelay > 0 {
-		// 	fmt.Println("Ping delay is not set to 0, parallel run effect may be lost")
-		// }
-		for seq := range pinger.Count {
-			{
-				_ping_producer_wg.Add(1)
-				go func(wg *sync.WaitGroup) {
-					defer wg.Done()
-					pinger.sendicmp(pinger.Destination[0], seq)
-				}(&_ping_producer_wg)
-
-				if pinger.RandomizePingDelay {
-					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
-				}
-				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-			}
-		}
-
-		// close(_pinger_channel)
-		// close(_stream_channel)
-	}
-	_ping_producer_wg.Wait()
-	_ping_consumer_wg.Wait()
-
-	pinger.Stats.TotalTime = time.Since(start)
-	return nil
-}
-
 func (pinger *Pinger) IsPingComplete() bool {
-	return _is_ping_done
+	return atomic.LoadInt32(&_is_ping_done) == 1
 }
 
 func (pinger *Pinger) MeasureStats() *Stats {
@@ -449,6 +392,9 @@ func (pinger *Pinger) sendicmp(destination net.IP, seq int) {
 	}
 
 	for {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			break
+		}
 		// Wait for a reply
 		reply := make([]byte, _DEFAULT_MTU)
 		err = icmpconn.SetReadDeadline(time.Now().Add(time.Duration(pinger.TTL) * time.Millisecond))
