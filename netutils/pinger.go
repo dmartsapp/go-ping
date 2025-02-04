@@ -114,7 +114,7 @@ func (pinger *Pinger) PingAll() error {
 			//
 			// fmt.Println(pinger.Destination)
 			if len(pinger.Stats.Packets) == pinger.Count*len(pinger.Destination) {
-				// close(_pinger_channel)
+				close(_pinger_channel)
 				// close(_stream_channel)
 				// fmt.Println(len(pinger.Stats.Packets))
 				_is_ping_done = true
@@ -152,11 +152,12 @@ func (pinger *Pinger) PingAll() error {
 			}
 		}
 
-		// close(_pinger_channel)
-		// close(_stream_channel)
 	}
+	// close(_pinger_channel)
+	// close(_stream_channel)
 	_ping_producer_wg.Wait()
 	_ping_consumer_wg.Wait()
+
 	pinger.Stats.TotalTime = time.Since(start)
 	return nil
 }
