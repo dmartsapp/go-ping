@@ -227,7 +227,7 @@ func (pinger *Pinger) PingOne() error {
 	return nil
 }
 
-func (pinger *Pinger) isPingComplete() bool {
+func (pinger *Pinger) IsPingComplete() bool {
 	return _is_ping_done
 }
 
