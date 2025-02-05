@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"net"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -56,10 +55,10 @@ type Pinger struct {
 }
 
 var (
-	_ping_producer_wg = sync.WaitGroup{}
-	_pinger_channel   = make(chan ICMPPacket, 1000)
-	_stream_channel   = make(chan string, 1000)
-	_is_ping_done     int32
+	// _ping_producer_wg = sync.WaitGroup{}
+	_pinger_channel = make(chan ICMPPacket, 1000)
+	_stream_channel = make(chan string, 1000)
+	_is_ping_done   int32
 	// _pinger_mutux = sync.Mutex{}
 )
 
@@ -92,81 +91,19 @@ func NewPinger(destination string) (*Pinger, error) {
 	start := time.Now()
 	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
 		pinger.Stats.TotalTime = time.Since(start)
-		return nil, errors.New("Unable to resolve the name")
+		return nil, errors.New("Unable to resolve the name for '" + destination + "'")
 	}
 	pinger.Stats.ResolveTime = time.Since(start)
 	return &pinger, nil
 }
 
 func (pinger *Pinger) PingAll() error {
-	start := time.Now()
-	// resolve the name first to populate pinger object properties
+	fmt.Println("Pinging all the destinations")
 
-	var mu sync.Mutex
-	var _ping_consumer_wg sync.WaitGroup
-	_ping_consumer_wg.Add(1)
-	// start monitoring the pinger channel for incoming data from completed pings
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		for packet := range _pinger_channel {
-			mu.Lock()
-			pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
-			mu.Unlock()
-		}
-	}(&_ping_consumer_wg)
-
-	_ping_consumer_wg.Add(1)
-	// start monitoring the pinger channel for incoming data from completed pings
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		for {
-			if len(pinger.Stats.Packets) == pinger.Count*len(pinger.Destination) {
-				close(_pinger_channel)
-				atomic.StoreInt32(&_is_ping_done, 1) // set to true
-				break
-			}
-		}
-	}(&_ping_consumer_wg)
-
-	if pinger.IsSequential {
-		for seq := 0; seq < pinger.Count; seq++ {
-			for _, ip := range pinger.Destination {
-				pinger.sendicmp(ip, seq)
-				if pinger.RandomizePingDelay {
-					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
-				}
-				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-			}
-		}
-		// close(_pinger_channel)
-	} else {
-		// if pinger.PingDelay > 0 {
-		// 	fmt.Println("Ping delay is not set to 0, parallel run effect may be lost")
-		// }
-		for seq := 0; seq < pinger.Count; seq++ {
-			for _, ip := range pinger.Destination {
-				_ping_producer_wg.Add(1)
-				go func(wg *sync.WaitGroup, ip net.IP, seq int) {
-					defer wg.Done()
-					pinger.sendicmp(ip, seq)
-				}(&_ping_producer_wg, ip, seq)
-
-				if pinger.RandomizePingDelay {
-					pinger.PingDelay = rand.Intn(_DEFAULT_MAX_DELAY)
-				}
-				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-			}
-		}
-
-	}
-	// close(_pinger_channel)
-	// close(_stream_channel)
-	_ping_producer_wg.Wait()
-	_ping_consumer_wg.Wait()
-
-	pinger.Stats.TotalTime = time.Since(start)
 	return nil
 }
+
+func pingProducer(pinger *Pinger, _pinger_channel chan<- ICMPPacket) {}
 
 func (pinger *Pinger) IsPingComplete() bool {
 	return atomic.LoadInt32(&_is_ping_done) == 1
