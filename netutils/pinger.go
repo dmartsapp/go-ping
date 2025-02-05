@@ -3,6 +3,7 @@ package netutils
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"math"
 	"math/rand"
@@ -75,7 +76,7 @@ const (
 	_DEFAULT_LISTEN_ADDRESS     = "0.0.0.0"
 )
 
-func NewPinger(destination string) *Pinger {
+func NewPinger(destination string) (*Pinger, error) {
 	pinger := Pinger{
 		DestinationStr: destination,
 		TTL:            _DEFAULT_TTL,
@@ -91,10 +92,10 @@ func NewPinger(destination string) *Pinger {
 	start := time.Now()
 	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
 		pinger.Stats.TotalTime = time.Since(start)
-		return nil
+		return nil, errors.New("Unable to resolve the name")
 	}
 	pinger.Stats.ResolveTime = time.Since(start)
-	return &pinger
+	return &pinger, nil
 }
 
 func (pinger *Pinger) PingAll() error {
