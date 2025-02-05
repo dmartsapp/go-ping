@@ -100,10 +100,7 @@ func NewPinger(destination string) *Pinger {
 func (pinger *Pinger) PingAll() error {
 	start := time.Now()
 	// resolve the name first to populate pinger object properties
-	// if err := pinger.resolveName(pinger.DestinationStr); err != nil {
-	// 	pinger.Stats.TotalTime = time.Since(start)
-	// 	return err
-	// }
+
 	var mu sync.Mutex
 	var _ping_consumer_wg sync.WaitGroup
 	_ping_consumer_wg.Add(1)
