@@ -3,6 +3,7 @@ package netutils
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -76,6 +77,7 @@ const (
 )
 
 func NewPinger(destination string) *Pinger {
+	fmt.Println("Inside new pinger")
 	pinger := Pinger{
 		DestinationStr: destination,
 		TTL:            _DEFAULT_TTL,
