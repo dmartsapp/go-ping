@@ -25,7 +25,7 @@ func main() {
 
 	pinger.
 		SetPayloadSizeInBytes(3).
-		// SetPingDelayInMS(100).
+		SetPingDelayInMS(100).
 		SetParallelPing(false)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)
@@ -33,12 +33,15 @@ func main() {
 	wg.Add(1)
 	go func(pinger *netutils.Pinger, wg *sync.WaitGroup) {
 		defer wg.Done()
-		for data := range pinger.Stream() {
+		for data := range pinger.StreamLog() {
 			fmt.Println(data)
 		}
+
 	}(pinger, &wg)
 	// pinger.PingAllWithNameResolve()
 	pinger.PingAll()
+
+	wg.Wait()
 	// pinger.PingOne()
 	// pinger.MeasureStats()
 	fmt.Println(pinger)

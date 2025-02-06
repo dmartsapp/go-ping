@@ -44,7 +44,7 @@ func NewPinger(destination string) (*Pinger, error) {
 		PingDelay:           _DEFAULT_PING_DELAY_MS,
 		MTU:                 _DEFAULT_MTU,
 		_packet_channel:     make(chan ICMPPacket, _DEFAULT_MAX_PING_COUNT),
-		_log_stream_channel: make(chan string, 1),
+		_log_stream_channel: make(chan string, _DEFAULT_MAX_PING_COUNT),
 	}
 	start := time.Now()
 	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
@@ -59,14 +59,10 @@ func (pinger *Pinger) PingAll() error {
 	var producer_wg sync.WaitGroup
 	producer_wg.Add(1)
 	var err error
-	go func(producer_wg *sync.WaitGroup, err *error) {
-		defer producer_wg.Done()
-		*err = startPingProducer(pinger)
-		if err != nil {
-			return
-		}
-	}(&producer_wg, &err)
-
+	go func(producer_wg *sync.WaitGroup) {
+		err = startPingProducer(pinger)
+		producer_wg.Done()
+	}(&producer_wg)
 	producer_wg.Wait()
 	return err
 }
@@ -76,19 +72,25 @@ func startPingProducer(pinger *Pinger) error {
 		return fmt.Errorf("invalid ping count")
 	}
 
+	var producer_inner_wg sync.WaitGroup
 	start := time.Now()
 	pinger.logToStreamChannel(fmt.Sprintf("Started pinger producer: %v", start))
 	if pinger.IsSequential {
+		producer_inner_wg.Add(1)
 		for iteration := 0; iteration < pinger.Count; iteration++ {
 			pinger.logToStreamChannel(fmt.Sprintf("Producting %v", iteration))
-			time.Sleep(time.Duration(pinger.PingDelay))
+			time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 		}
+		producer_inner_wg.Done()
+
 	} else {
 		fmt.Println("Producing parallel pings")
 
 	}
+	producer_inner_wg.Wait()
 	end := time.Since(start)
 	pinger.logToStreamChannel(fmt.Sprintf("Total time taken for ping: %v", end))
+	close(pinger._log_stream_channel)
 	return nil
 }
 
@@ -108,7 +110,7 @@ func (pinger *Pinger) logToStreamChannel(data string) {
 }
 
 // need to work on this pinger channel to gracefully handle the incoming data
-func (pinger *Pinger) Stream() <-chan string {
+func (pinger *Pinger) StreamLog() <-chan string {
 	return pinger._log_stream_channel
 }
 
@@ -183,7 +185,6 @@ func (p *Pinger) String() string {
 }
 
 func (pinger *Pinger) resolveName(destination string) error {
-	var mu sync.Mutex
 	// method resolves the name against a timeout defined in ResolveTimeout
 	// also populates basic properties like
 	// - resolved addresses and
@@ -197,9 +198,7 @@ func (pinger *Pinger) resolveName(destination string) error {
 	if err != nil {
 		pinger.Stats.ResolveTime = time.Duration(time.Since(start).Milliseconds())
 		pinger.Stats.ResolveTimedOut = true
-		mu.Lock()
-		pinger._log_stream_channel <- "Unable to resolve for " + destination + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-		mu.Unlock()
+		pinger.logToStreamChannel("Unable to resolve for " + destination + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data")
 		return err
 	}
 	pinger.Destination = addr
