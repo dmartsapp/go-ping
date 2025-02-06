@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/farhansabbir/go-ping/netutils"
 )
@@ -16,21 +17,32 @@ var (
 func main() {
 
 	// pinger := netutils.NewPinger("home435nas.local").
-	pinger := netutils.NewPinger("microsoft.com").
-		SetPingCount(2).
-		// SetTTL(10).
-		SetPayloadSizeInBytes(3).
-		SetPingDelayInMS(100).
+	pinger, err := netutils.NewPinger("microsoft.com")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	pinger.
+		SetPingCount(20).
+		SetPayloadSizeInBytes(10).
+		SetPingDelayInMS(500).
 		SetParallelPing(true)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)
-	go func(pinger *netutils.Pinger) {
-		for data := range pinger.Stream() {
-			fmt.Println(data)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func(pinger *netutils.Pinger, wg *sync.WaitGroup) {
+		defer wg.Done()
+		for log := range pinger.StreamLog() {
+			fmt.Println(log)
 		}
-	}(pinger)
+
+	}(pinger, &wg)
 	// pinger.PingAllWithNameResolve()
 	pinger.PingAll()
+
+	wg.Wait()
 	// pinger.PingOne()
 	pinger.MeasureStats()
 	// fmt.Println(pinger)
