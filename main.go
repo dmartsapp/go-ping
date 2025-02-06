@@ -25,7 +25,7 @@ func main() {
 
 	pinger.
 		SetPayloadSizeInBytes(3).
-		SetPingDelayInMS(100).
+		SetPingDelayInMS(500).
 		SetParallelPing(false)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)

@@ -91,6 +91,7 @@ func startPingProducer(pinger *Pinger) error {
 	end := time.Since(start)
 	pinger.logToStreamChannel(fmt.Sprintf("Total time taken for ping: %v", end))
 	close(pinger._log_stream_channel)
+	close(pinger._packet_channel)
 	return nil
 }
 
