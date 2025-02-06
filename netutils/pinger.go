@@ -2,6 +2,8 @@ package netutils
 
 import (
 	"context"
+	"math/rand/v2"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,16 +79,39 @@ func startPingProducer(pinger *Pinger) error {
 	pinger.logToStreamChannel(fmt.Sprintf("Started pinger producer: %v", start))
 	if pinger.IsSequential {
 		producer_inner_wg.Add(1)
-		for iteration := 0; iteration < pinger.Count; iteration++ {
+		for iteration := 1; iteration <= pinger.Count; iteration++ {
 			for _, ip := range pinger.Destination {
 				pinger.sendICMP(ip, iteration)
 			}
-			time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
+			if pinger.RandomizePingDelay {
+				time.Sleep(time.Millisecond * time.Duration(rand.Int64N(_DEFAULT_MAX_DELAY_MS)))
+			} else {
+				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
+			}
+
 		}
 		producer_inner_wg.Done()
 
 	} else {
 		fmt.Println("Producing parallel pings")
+		for iteration := 1; iteration <= pinger.Count; iteration++ {
+			for _, ip := range pinger.Destination {
+				producer_inner_wg.Add(1)
+				go func(pinger *Pinger, producer_inner_wg *sync.WaitGroup, iteration int, ip net.IP) {
+					defer producer_inner_wg.Done()
+					pinger.sendICMP(ip, iteration)
+					// pinger.logToStreamChannel(strconv.Itoa(iteration))
+
+				}(pinger, &producer_inner_wg, iteration, ip)
+
+			}
+			if pinger.RandomizePingDelay {
+				time.Sleep(time.Millisecond * time.Duration(rand.Int64N(_DEFAULT_MAX_DELAY_MS)))
+			} else {
+				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
+			}
+		}
+		// producer_inner_wg.Done()
 
 	}
 	producer_inner_wg.Wait()
@@ -171,10 +196,11 @@ func (pinger *Pinger) SetTTL(ttl int) *Pinger {
 	return pinger
 }
 
-func (pinger *Pinger) SetRandomizedPingDelay(random bool) {
+func (pinger *Pinger) SetRandomizedPingDelay(random bool) *Pinger {
 	// explicitly set if ping delay should be randomized
 	// returns nil
 	pinger.RandomizePingDelay = random
+	return pinger
 }
 
 func (p *Pinger) String() string {
