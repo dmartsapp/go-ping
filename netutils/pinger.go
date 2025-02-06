@@ -15,34 +15,36 @@ import (
 )
 
 type Pinger struct {
-	DestinationStr     string   `json:"destination"`
-	Destination        []net.IP `json:"destination_ip_addresses"`
-	TTL                int      `json:"ttl"`
-	ResolveTimeout     int      `json:"resolve_timeout_ms"`
-	Payload            string   `json:"payload_data"`
-	Count              int      `json:"ping_count"`
-	Stats              *Stats   `json:"stats"`
-	IsSequential       bool     `json:"is_sequential_ping"`
-	PingDelay          int      `json:"ping_delay_ms"`
-	RandomizePingDelay bool     `json:"is_ping_delay_random"`
-	MTU                int      `json:"mtu"`
-	_pinger_channel    chan ICMPPacket
-	_stream_channel    chan string
-	_is_ping_done      int32
+	DestinationStr      string   `json:"destination"`
+	Destination         []net.IP `json:"destination_ip_addresses"`
+	TTL                 int      `json:"ttl"`
+	ResolveTimeout      int      `json:"resolve_timeout_ms"`
+	Payload             string   `json:"payload_data"`
+	Count               int      `json:"ping_count"`
+	Stats               *Stats   `json:"stats"`
+	IsSequential        bool     `json:"is_sequential_ping"`
+	PingDelay           int      `json:"ping_delay_ms"`
+	RandomizePingDelay  bool     `json:"is_ping_delay_random"`
+	MTU                 int      `json:"mtu"`
+	_packet_channel     chan ICMPPacket
+	_log_stream_channel chan string
+	_is_ping_done       int32
 }
 
 func NewPinger(destination string) (*Pinger, error) {
 	pinger := Pinger{
-		DestinationStr: destination,
-		TTL:            _DEFAULT_TTL,
-		Destination:    []net.IP{},
-		Payload:        strings.Repeat("d", _DEFAULT_PAYLOAD_SIZE),
-		Count:          _DEFAULT_PING_COUNT,
-		Stats:          &Stats{},
-		IsSequential:   true,
-		ResolveTimeout: _DEFAULT_RESOLVE_TIMEOUT_MS,
-		PingDelay:      _DEFAULT_PING_DELAY_MS,
-		MTU:            _DEFAULT_MTU,
+		DestinationStr:      destination,
+		TTL:                 _DEFAULT_TTL,
+		Destination:         []net.IP{},
+		Payload:             strings.Repeat("d", _DEFAULT_PAYLOAD_SIZE),
+		Count:               _DEFAULT_MIN_PING_COUNT,
+		Stats:               &Stats{},
+		IsSequential:        true,
+		ResolveTimeout:      _DEFAULT_RESOLVE_TIMEOUT_MS,
+		PingDelay:           _DEFAULT_PING_DELAY_MS,
+		MTU:                 _DEFAULT_MTU,
+		_packet_channel:     make(chan ICMPPacket, _DEFAULT_MAX_PING_COUNT),
+		_log_stream_channel: make(chan string, 1),
 	}
 	start := time.Now()
 	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
@@ -54,19 +56,60 @@ func NewPinger(destination string) (*Pinger, error) {
 }
 
 func (pinger *Pinger) PingAll() error {
-	fmt.Println("Pinging all the destinations")
+	var producer_wg sync.WaitGroup
+	producer_wg.Add(1)
+	var err error
+	go func(producer_wg *sync.WaitGroup, err *error) {
+		defer producer_wg.Done()
+		*err = startPingProducer(pinger)
+		if err != nil {
+			return
+		}
+	}(&producer_wg, &err)
 
+	producer_wg.Wait()
+	return err
+}
+
+func startPingProducer(pinger *Pinger) error {
+	if pinger.Count == 0 {
+		return fmt.Errorf("invalid ping count")
+	}
+
+	start := time.Now()
+	pinger.logToStreamChannel(fmt.Sprintf("Started pinger producer: %v", start))
+	if pinger.IsSequential {
+		for iteration := 0; iteration < pinger.Count; iteration++ {
+			pinger.logToStreamChannel(fmt.Sprintf("Producting %v", iteration))
+			time.Sleep(time.Duration(pinger.PingDelay))
+		}
+	} else {
+		fmt.Println("Producing parallel pings")
+
+	}
+	end := time.Since(start)
+	pinger.logToStreamChannel(fmt.Sprintf("Total time taken for ping: %v", end))
 	return nil
 }
 
-func pingProducer(pinger *Pinger, _pinger_channel chan<- ICMPPacket) {}
+func startPingConsumer(pinger *Pinger) error {
+	return nil
+}
 
 func (pinger *Pinger) IsPingComplete() bool {
 	return atomic.LoadInt32(&pinger._is_ping_done) == 1
 }
 
+func (pinger *Pinger) logToStreamChannel(data string) {
+	var mu sync.Mutex
+	mu.Lock()
+	pinger._log_stream_channel <- data
+	mu.Unlock()
+}
+
+// need to work on this pinger channel to gracefully handle the incoming data
 func (pinger *Pinger) Stream() <-chan string {
-	return pinger._stream_channel
+	return pinger._log_stream_channel
 }
 
 func (pinger *Pinger) SetParallelPing(parallel bool) *Pinger {
@@ -88,6 +131,9 @@ func (pinger *Pinger) SetPingCount(count int) *Pinger {
 	// returns nil
 	if count < 0 {
 		count *= -1
+	} else if count > _DEFAULT_MAX_PING_COUNT {
+		pinger.Count = _DEFAULT_MAX_PING_COUNT
+		return pinger
 	}
 	pinger.Count = count
 	return pinger
@@ -152,7 +198,7 @@ func (pinger *Pinger) resolveName(destination string) error {
 		pinger.Stats.ResolveTime = time.Duration(time.Since(start).Milliseconds())
 		pinger.Stats.ResolveTimedOut = true
 		mu.Lock()
-		pinger._stream_channel <- "Unable to resolve for " + destination + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
+		pinger._log_stream_channel <- "Unable to resolve for " + destination + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
 		mu.Unlock()
 		return err
 	}

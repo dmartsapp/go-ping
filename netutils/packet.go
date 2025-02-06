@@ -42,7 +42,7 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
 			mu.Lock()
-			pinger._pinger_channel <- icmppacket
+			pinger._packet_channel <- icmppacket
 			mu.Unlock()
 			return
 		}
@@ -53,7 +53,7 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
 			mu.Lock()
-			pinger._pinger_channel <- icmppacket
+			pinger._packet_channel <- icmppacket
 			mu.Unlock()
 			return
 		}
@@ -74,7 +74,7 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 		pinger.Stats.Loss += 1
 		icmppacket.ErrorStr = err.Error()
 		mu.Lock()
-		pinger._pinger_channel <- icmppacket
+		pinger._packet_channel <- icmppacket
 		mu.Unlock()
 		return
 	}
@@ -86,8 +86,8 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
 			mu.Lock()
-			pinger._stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-			pinger._pinger_channel <- icmppacket
+			pinger._log_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
+			pinger._packet_channel <- icmppacket
 			mu.Unlock()
 			return
 		}
@@ -99,8 +99,8 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
 			mu.Lock()
-			pinger._stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-			pinger._pinger_channel <- icmppacket
+			pinger._log_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
+			pinger._packet_channel <- icmppacket
 			mu.Unlock()
 			return
 		}
@@ -118,8 +118,8 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
 			mu.Lock()
-			pinger._stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-			pinger._pinger_channel <- icmppacket
+			pinger._log_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
+			pinger._packet_channel <- icmppacket
 			mu.Unlock()
 			return
 		}
@@ -129,8 +129,8 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
 			mu.Lock()
-			pinger._stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-			pinger._pinger_channel <- icmppacket
+			pinger._log_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
+			pinger._packet_channel <- icmppacket
 			mu.Unlock()
 			return
 		}
@@ -141,8 +141,8 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 			pinger.Stats.Loss += 1
 			icmppacket.ErrorStr = err.Error()
 			mu.Lock()
-			pinger._stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-			pinger._pinger_channel <- icmppacket
+			pinger._log_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
+			pinger._packet_channel <- icmppacket
 			mu.Unlock()
 			return
 		}
@@ -154,8 +154,8 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 				icmppacket.ReceiveDateTimeUNIX = time.Now().UnixMilli()
 				mu.Lock()
 				// _stream_channel <- time.Now().Local().Format("12/12/2014 18:23:21") + ": Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
-				pinger._stream_channel <- "Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data in " + strconv.FormatFloat(float64(icmppacket.ReceiveDateTimeUNIX-icmppacket.SentDateTimeUNIX)/1, 'f', 0, 64) + "ms"
-				pinger._pinger_channel <- icmppacket
+				pinger._log_stream_channel <- "Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data in " + strconv.FormatFloat(float64(icmppacket.ReceiveDateTimeUNIX-icmppacket.SentDateTimeUNIX)/1, 'f', 0, 64) + "ms"
+				pinger._packet_channel <- icmppacket
 				mu.Unlock()
 				return
 			} else { // sequence mismatch, look for another packet to match

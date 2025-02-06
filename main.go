@@ -23,11 +23,10 @@ func main() {
 		return
 	}
 
-	pinger.SetPingCount(2).
-		// SetTTL(10).
+	pinger.
 		SetPayloadSizeInBytes(3).
 		// SetPingDelayInMS(100).
-		SetParallelPing(true)
+		SetParallelPing(false)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)
 	var wg sync.WaitGroup
