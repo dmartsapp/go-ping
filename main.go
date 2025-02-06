@@ -41,10 +41,10 @@ func main() {
 	// pinger.PingAllWithNameResolve()
 	pinger.PingAll()
 	// pinger.PingOne()
-	pinger.MeasureStats()
+	// pinger.MeasureStats()
+	fmt.Println(pinger)
 	// fmt.Println(pinger)
-	// fmt.Println(pinger)
-	fmt.Println(pinger.Stats)
+	// fmt.Println(pinger.Stats)
 
 	// fmt.Println([]byte(strconv.Itoa(int(time.Now().UnixMicro()))))
 
