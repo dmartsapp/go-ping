@@ -17,7 +17,7 @@ var (
 func main() {
 
 	// pinger := netutils.NewPinger("home435nas.local").
-	pinger, err := netutils.NewPinger("localhost")
+	pinger, err := netutils.NewPinger("microsoft.com")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -26,8 +26,7 @@ func main() {
 	pinger.
 		SetPingCount(20).
 		SetPayloadSizeInBytes(10).
-		SetPingDelayInMS(50).
-		SetRandomizedPingDelay(true).
+		SetPingDelayInMS(500).
 		SetParallelPing(true)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)
@@ -35,8 +34,8 @@ func main() {
 	wg.Add(1)
 	go func(pinger *netutils.Pinger, wg *sync.WaitGroup) {
 		defer wg.Done()
-		for data := range pinger.StreamLog() {
-			fmt.Println(data)
+		for log := range pinger.StreamLog() {
+			fmt.Println(log)
 		}
 
 	}(pinger, &wg)
@@ -45,10 +44,10 @@ func main() {
 
 	wg.Wait()
 	// pinger.PingOne()
-	// pinger.MeasureStats()
-	fmt.Println(pinger)
+	pinger.MeasureStats()
 	// fmt.Println(pinger)
-	// fmt.Println(pinger.Stats)
+	// fmt.Println(pinger)
+	fmt.Println(pinger.Stats)
 
 	// fmt.Println([]byte(strconv.Itoa(int(time.Now().UnixMicro()))))
 

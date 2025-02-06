@@ -58,14 +58,22 @@ func NewPinger(destination string) (*Pinger, error) {
 }
 
 func (pinger *Pinger) PingAll() error {
-	var producer_wg sync.WaitGroup
+	var producer_wg, consumer_wg sync.WaitGroup
 	producer_wg.Add(1)
 	var err error
 	go func(producer_wg *sync.WaitGroup) {
+		defer producer_wg.Done()
 		err = startPingProducer(pinger)
-		producer_wg.Done()
 	}(&producer_wg)
+
+	consumer_wg.Add(1)
+	go func(consumer_wg *sync.WaitGroup) {
+		defer consumer_wg.Done()
+		err = startPingConsumer(pinger)
+	}(&consumer_wg)
+
 	producer_wg.Wait()
+	consumer_wg.Wait()
 	return err
 }
 
@@ -76,7 +84,7 @@ func startPingProducer(pinger *Pinger) error {
 
 	var producer_inner_wg sync.WaitGroup
 	start := time.Now()
-	pinger.logToStreamChannel(fmt.Sprintf("Started pinger producer: %v", start))
+	// pinger.logToStreamChannel(fmt.Sprintf("Started pinger producer: %v", start))
 	if pinger.IsSequential {
 		producer_inner_wg.Add(1)
 		for iteration := 1; iteration <= pinger.Count; iteration++ {
@@ -93,15 +101,13 @@ func startPingProducer(pinger *Pinger) error {
 		producer_inner_wg.Done()
 
 	} else {
-		fmt.Println("Producing parallel pings")
+		// fmt.Println("Producing parallel pings")
 		for iteration := 1; iteration <= pinger.Count; iteration++ {
 			for _, ip := range pinger.Destination {
 				producer_inner_wg.Add(1)
 				go func(pinger *Pinger, producer_inner_wg *sync.WaitGroup, iteration int, ip net.IP) {
 					defer producer_inner_wg.Done()
 					pinger.sendICMP(ip, iteration)
-					// pinger.logToStreamChannel(strconv.Itoa(iteration))
-
 				}(pinger, &producer_inner_wg, iteration, ip)
 
 			}
@@ -111,23 +117,29 @@ func startPingProducer(pinger *Pinger) error {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
 		}
-		// producer_inner_wg.Done()
-
 	}
 	producer_inner_wg.Wait()
+	pinger.setPingerComplete()
 	end := time.Since(start)
-	pinger.logToStreamChannel(fmt.Sprintf("Total time taken for ping: %v", end))
+	pinger.Stats.TotalTime = end
 	close(pinger._log_stream_channel)
 	close(pinger._packet_channel)
 	return nil
 }
 
 func startPingConsumer(pinger *Pinger) error {
+	for packet := range pinger._packet_channel {
+		pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
+	}
 	return nil
 }
 
 func (pinger *Pinger) IsPingComplete() bool {
 	return atomic.LoadInt32(&pinger._is_ping_done) == 1
+}
+
+func (pinger *Pinger) setPingerComplete() {
+	atomic.StoreInt32(&pinger._is_ping_done, 1)
 }
 
 func (pinger *Pinger) logToStreamChannel(data string) {
