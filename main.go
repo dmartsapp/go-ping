@@ -17,16 +17,17 @@ var (
 func main() {
 
 	// pinger := netutils.NewPinger("home435nas.local").
-	pinger, err := netutils.NewPinger("microsoft.com")
+	pinger, err := netutils.NewPinger("localhost")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	pinger.
+		SetPingCount(2).
 		SetPayloadSizeInBytes(3).
 		SetPingDelayInMS(500).
-		SetParallelPing(false)
+		SetParallelPing(true)
 	// pinger := netutils.NewPinger("google.com")
 	// pinger.SetParallelPing(true)
 	var wg sync.WaitGroup

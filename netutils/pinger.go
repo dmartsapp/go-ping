@@ -78,7 +78,9 @@ func startPingProducer(pinger *Pinger) error {
 	if pinger.IsSequential {
 		producer_inner_wg.Add(1)
 		for iteration := 0; iteration < pinger.Count; iteration++ {
-			pinger.logToStreamChannel(fmt.Sprintf("Producting %v", iteration))
+			for _, ip := range pinger.Destination {
+				pinger.sendICMP(ip, iteration)
+			}
 			time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 		}
 		producer_inner_wg.Done()
