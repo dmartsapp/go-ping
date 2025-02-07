@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/farhansabbir/go-ping/netutils"
 )
@@ -16,38 +15,45 @@ var (
 
 func main() {
 
-	// pinger := netutils.NewPinger("home435nas.local").
-	pinger, err := netutils.NewPinger("microsoft.com")
+	webclient, err := netutils.NewWebClient("http://192.168.1.100/cgi-bin/api.cgi")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	fmt.Println(webclient)
 
-	pinger.
-		SetPingCount(20).
-		SetPayloadSizeInBytes(10).
-		SetPingDelayInMS(500).
-		SetParallelPing(true)
-	// pinger := netutils.NewPinger("google.com")
-	// pinger.SetParallelPing(true)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func(pinger *netutils.Pinger, wg *sync.WaitGroup) {
-		defer wg.Done()
-		for log := range pinger.StreamLog() {
-			fmt.Println(log)
-		}
+	// pinger := netutils.NewPinger("home435nas.local").
+	// pinger, err := netutils.NewPinger("microsoft.com")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
 
-	}(pinger, &wg)
-	// pinger.PingAllWithNameResolve()
-	pinger.PingAll()
+	// pinger.
+	// 	SetPingCount(20).
+	// 	SetPayloadSizeInBytes(10).
+	// 	SetPingDelayInMS(500).
+	// 	SetParallelPing(true)
+	// // pinger := netutils.NewPinger("google.com")
+	// // pinger.SetParallelPing(true)
+	// var wg sync.WaitGroup
+	// wg.Add(1)
+	// go func(pinger *netutils.Pinger, wg *sync.WaitGroup) {
+	// 	defer wg.Done()
+	// 	for log := range pinger.StreamLog() {
+	// 		fmt.Println(log)
+	// 	}
 
-	wg.Wait()
-	// pinger.PingOne()
-	pinger.MeasureStats()
-	// fmt.Println(pinger)
-	// fmt.Println(pinger)
-	fmt.Println(pinger.Stats)
+	// }(pinger, &wg)
+	// // pinger.PingAllWithNameResolve()
+	// pinger.PingAll()
+
+	// wg.Wait()
+	// // pinger.PingOne()
+	// pinger.MeasureStats()
+	// // fmt.Println(pinger)
+	// // fmt.Println(pinger)
+	// fmt.Println(pinger.Stats)
 
 	// fmt.Println([]byte(strconv.Itoa(int(time.Now().UnixMicro()))))
 
