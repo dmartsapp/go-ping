@@ -14,3 +14,13 @@ const (
 	_DEFAULT_LISTEN_ADDRESS         string = "0.0.0.0"
 	_DEFAULT_HTTP_CLIENT_USER_AGENT string = "dmarts.app-http-v0.1"
 )
+
+var (
+	_DEFAULT_SUPPORTED_WEB_METHODS = map[string]bool{
+		"GET":     true,
+		"POST":    true,
+		"PUT":     true,
+		"DELETE":  true,
+		"OPTIONS": true,
+	}
+)

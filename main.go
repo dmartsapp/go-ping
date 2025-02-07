@@ -15,12 +15,13 @@ var (
 
 func main() {
 
-	webclient, err := netutils.NewWebClient("http://192.168.1.100/cgi-bin/api.cgi")
+	webclient, err := netutils.NewWebClient("https://google.com:8443/cgi-bin?name=google")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(webclient)
+	webclient.Ping()
+	fmt.Println(webclient.SendRequest("GET"))
 
 	// pinger := netutils.NewPinger("home435nas.local").
 	// pinger, err := netutils.NewPinger("microsoft.com")
