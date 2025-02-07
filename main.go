@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/farhansabbir/go-ping/netutils"
+	"github.com/farhansabbir/go-ping/netutils/methods"
 )
 
 var (
@@ -21,7 +22,7 @@ func main() {
 		return
 	}
 	webclient.Ping()
-	fmt.Println(webclient.SendRequest("GET"))
+	fmt.Println(webclient.SendRequest(methods.GET))
 
 	// pinger := netutils.NewPinger("home435nas.local").
 	// pinger, err := netutils.NewPinger("microsoft.com")
