@@ -11,6 +11,9 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
+type Packet struct {
+}
+
 type ICMPPacket struct {
 	Destination         net.IPAddr `json:"destination"`
 	PayloadSize         int        `json:"payload_size"`

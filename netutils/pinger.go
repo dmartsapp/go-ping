@@ -92,7 +92,7 @@ func startPingProducer(pinger *Pinger) error {
 				pinger.sendICMP(ip, iteration)
 			}
 			if pinger.RandomizePingDelay {
-				time.Sleep(time.Millisecond * time.Duration(rand.Int64N(_DEFAULT_MAX_DELAY_MS)))
+				time.Sleep(time.Millisecond * time.Duration(rand.IntN(_DEFAULT_MAX_DELAY_MS)))
 			} else {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
@@ -112,7 +112,7 @@ func startPingProducer(pinger *Pinger) error {
 
 			}
 			if pinger.RandomizePingDelay {
-				time.Sleep(time.Millisecond * time.Duration(rand.Int64N(_DEFAULT_MAX_DELAY_MS)))
+				time.Sleep(time.Millisecond * time.Duration(rand.IntN(_DEFAULT_MAX_DELAY_MS)))
 			} else {
 				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 			}
