@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/farhansabbir/go-ping/netutils"
+	"github.com/dmartsapp/go-ping/netutils"
 )
 
 var (

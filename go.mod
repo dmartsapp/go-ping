@@ -1,6 +1,6 @@
-module github.com/farhansabbir/go-ping
+module github.com/dmartsapp/go-ping
 
-go 1.23.5
+go 1.25.1
 
 require golang.org/x/net v0.39.0
 
