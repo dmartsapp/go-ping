@@ -1,4 +1,4 @@
-module github.com/dmartsapp/go-ping
+module github.com/dmartsapp/go-ping/v2
 
 go 1.27.1
 

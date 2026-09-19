@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dmartsapp/go-ping/netutils"
+	"github.com/dmartsapp/go-ping/v2/netutils"
 )
 
 func main() {

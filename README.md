@@ -1,21 +1,23 @@
 # go-ping
 
 [![CI](https://github.com/dmartsapp/go-ping/actions/workflows/ci.yaml/badge.svg)](https://github.com/dmartsapp/go-ping/actions/workflows/ci.yaml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/dmartsapp/go-ping.svg)](https://pkg.go.dev/github.com/dmartsapp/go-ping)
+[![Go Reference](https://pkg.go.dev/badge/github.com/dmartsapp/go-ping/v2.svg)](https://pkg.go.dev/github.com/dmartsapp/go-ping/v2)
 
 A small Go library for sending ICMP echo ("ping") requests, over **IPv4 and IPv6**, without shelling out to the system `ping` binary. It's the ICMP engine behind [shint](https://github.com/dmartsapp/shint)'s `ping` command.
 
 ## Install
 
 ```bash
-go get github.com/dmartsapp/go-ping@v2
+go get github.com/dmartsapp/go-ping/v2@latest
 ```
 
-Requires Go 1.27.1 or newer (see `go.mod`).
+The module path carries the `/v2` suffix per Go's semantic import versioning rules for a v2+ module - import it as `github.com/dmartsapp/go-ping/v2/netutils`. Requires Go 1.27.1 or newer (see `go.mod`).
 
 ## Quick start
 
 ```go
+import "github.com/dmartsapp/go-ping/v2/netutils"
+
 pinger, err := netutils.NewPinger("google.com") // resolves both A and AAAA by default
 if err != nil {
     log.Fatal(err)
