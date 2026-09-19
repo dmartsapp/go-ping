@@ -2,249 +2,283 @@ package netutils
 
 import (
 	"context"
-	"math/rand/v2"
-
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"math/rand/v2"
 	"net"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
+// Pinger sends ICMP echo requests to every address a hostname resolves to,
+// dispatching each one over ICMPv4 or ICMPv6 depending on that address's own
+// family. A dual-stack host (both A and AAAA records) is pinged over both
+// protocols in the same run - see SetNetwork to restrict that.
 type Pinger struct {
-	DestinationStr      string   `json:"destination"`
-	Destination         []net.IP `json:"destination_ip_addresses"`
-	TTL                 int      `json:"ttl"`
-	ResolveTimeout      int      `json:"resolve_timeout_ms"`
-	Payload             string   `json:"payload_data"`
-	Count               int      `json:"ping_count"`
-	Stats               *Stats   `json:"stats"`
-	IsSequential        bool     `json:"is_sequential_ping"`
-	PingDelay           int      `json:"ping_delay_ms"`
-	RandomizePingDelay  bool     `json:"is_ping_delay_random"`
-	MTU                 int      `json:"mtu"`
-	_packet_channel     chan ICMPPacket
-	_log_stream_channel chan string
-	_is_ping_done       int32
+	DestinationStr string   `json:"destination"`
+	Destination    []net.IP `json:"destination_ip_addresses"`
+
+	// Network is the resolution family: "ip" (default, both v4 and v6),
+	// "ip4", or "ip6". Matches the network argument net.Resolver.LookupIP
+	// itself takes, so there's nothing new to learn here.
+	Network string `json:"network"`
+
+	// ReplyTimeoutMS is how long a single echo request waits for its reply
+	// before being counted as lost. (In releases before v2.0.0 this was
+	// misleadingly named TTL - it was never the IP-level hop limit.)
+	ReplyTimeoutMS int `json:"reply_timeout_ms"`
+
+	ResolveTimeoutMS   int    `json:"resolve_timeout_ms"`
+	Payload            []byte `json:"-"`
+	Count              int    `json:"ping_count"`
+	Stats              *Stats `json:"stats"`
+	IsSequential       bool   `json:"is_sequential_ping"`
+	PingDelay          int    `json:"ping_delay_ms"`
+	RandomizePingDelay bool   `json:"is_ping_delay_random"`
+
+	// MTU bounds both the reply read buffer and (via SetPayloadSizeInBytes)
+	// the largest payload that will fit in a single unfragmented packet.
+	MTU int `json:"mtu"`
+
+	packetCh  chan ICMPPacket
+	logCh     chan string
+	pingsDone int32 // atomic bool
 }
 
+// NewPinger resolves destination (per Network, "ip"/dual-stack by default)
+// and returns a Pinger ready to be configured with the SetXxx methods and
+// run with PingAll.
 func NewPinger(destination string) (*Pinger, error) {
-	pinger := Pinger{
-		DestinationStr:      destination,
-		TTL:                 _DEFAULT_TTL,
-		Destination:         []net.IP{},
-		Payload:             strings.Repeat("d", _DEFAULT_PAYLOAD_SIZE),
-		Count:               _DEFAULT_MIN_PING_COUNT,
-		Stats:               &Stats{},
-		IsSequential:        true,
-		ResolveTimeout:      _DEFAULT_RESOLVE_TIMEOUT_MS,
-		PingDelay:           _DEFAULT_PING_DELAY_MS,
-		MTU:                 _DEFAULT_MTU,
-		_packet_channel:     make(chan ICMPPacket, _DEFAULT_MAX_PING_COUNT),
-		_log_stream_channel: make(chan string, _DEFAULT_MAX_PING_COUNT),
+	pinger := &Pinger{
+		DestinationStr:     destination,
+		Network:            _DEFAULT_NETWORK,
+		ReplyTimeoutMS:     _DEFAULT_REPLY_TIMEOUT_MS,
+		Destination:        []net.IP{},
+		Payload:            []byte(repeatByte('d', _DEFAULT_PAYLOAD_SIZE)),
+		Count:              _DEFAULT_MIN_PING_COUNT,
+		Stats:              &Stats{},
+		IsSequential:       true,
+		ResolveTimeoutMS:   _DEFAULT_RESOLVE_TIMEOUT_MS,
+		PingDelay:          _DEFAULT_PING_DELAY_MS,
+		MTU:                _DEFAULT_MTU,
+		packetCh:           make(chan ICMPPacket, _DEFAULT_MAX_PING_COUNT),
+		logCh:              make(chan string, _DEFAULT_MAX_PING_COUNT),
 	}
 	start := time.Now()
 	if err := pinger.resolveName(pinger.DestinationStr); err != nil {
 		pinger.Stats.TotalTime = time.Since(start)
-		return nil, errors.New("Unable to resolve the name for '" + destination + "'")
+		return nil, fmt.Errorf("unable to resolve %q: %w", destination, err)
 	}
 	pinger.Stats.ResolveTime = time.Since(start)
-	return &pinger, nil
+	return pinger, nil
 }
 
+// PingAll sends Count echo requests to every resolved destination address
+// (sequentially or in parallel per SetParallelPing) and blocks until every
+// reply or timeout is collected into Stats.Packets.
 func (pinger *Pinger) PingAll() error {
-	var producer_wg, consumer_wg sync.WaitGroup
-	producer_wg.Add(1)
-	var err error
-	go func(producer_wg *sync.WaitGroup) {
-		defer producer_wg.Done()
-		err = startPingProducer(pinger)
-	}(&producer_wg)
-
-	consumer_wg.Add(1)
-	go func(consumer_wg *sync.WaitGroup) {
-		defer consumer_wg.Done()
-		err = startPingConsumer(pinger)
-	}(&consumer_wg)
-
-	producer_wg.Wait()
-	consumer_wg.Wait()
-	return err
-}
-
-func startPingProducer(pinger *Pinger) error {
-	if pinger.Count == 0 {
-		return fmt.Errorf("invalid ping count")
+	if pinger.Count <= 0 {
+		return errors.New("invalid ping count")
+	}
+	if len(pinger.Destination) == 0 {
+		return errors.New("no resolved destination addresses to ping")
 	}
 
-	var producer_inner_wg sync.WaitGroup
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := pinger.produce(); err != nil {
+			errCh <- err
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		pinger.consume()
+	}()
+
+	wg.Wait()
+	close(errCh)
+	return <-errCh // nil if the channel was never written to and is now closed
+}
+
+// produce sends every request (sequentially or fanned out in parallel,
+// per IsSequential) and closes both channels once the last one has been
+// sent, so consume's range loop terminates.
+func (pinger *Pinger) produce() error {
 	start := time.Now()
-	// pinger.logToStreamChannel(fmt.Sprintf("Started pinger producer: %v", start))
-	if pinger.IsSequential {
-		producer_inner_wg.Add(1)
-		for iteration := 1; iteration <= pinger.Count; iteration++ {
+	defer func() {
+		pinger.setPingerComplete()
+		pinger.Stats.TotalTime = time.Since(start)
+		close(pinger.logCh)
+		close(pinger.packetCh)
+	}()
+
+	for iteration := 1; iteration <= pinger.Count; iteration++ {
+		if pinger.IsSequential {
 			for _, ip := range pinger.Destination {
 				pinger.sendICMP(ip, iteration)
 			}
-			if pinger.RandomizePingDelay {
-				time.Sleep(time.Millisecond * time.Duration(rand.IntN(_DEFAULT_MAX_DELAY_MS)))
-			} else {
-				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-			}
-
-		}
-		producer_inner_wg.Done()
-
-	} else {
-		// fmt.Println("Producing parallel pings")
-		for iteration := 1; iteration <= pinger.Count; iteration++ {
+		} else {
+			var wg sync.WaitGroup
 			for _, ip := range pinger.Destination {
-				producer_inner_wg.Add(1)
-				go func(pinger *Pinger, producer_inner_wg *sync.WaitGroup, iteration int, ip net.IP) {
-					defer producer_inner_wg.Done()
+				wg.Add(1)
+				go func(ip net.IP) {
+					defer wg.Done()
 					pinger.sendICMP(ip, iteration)
-				}(pinger, &producer_inner_wg, iteration, ip)
+				}(ip)
+			}
+			wg.Wait()
+		}
 
-			}
-			if pinger.RandomizePingDelay {
-				time.Sleep(time.Millisecond * time.Duration(rand.IntN(_DEFAULT_MAX_DELAY_MS)))
-			} else {
-				time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-			}
+		if iteration == pinger.Count {
+			break // no delay after the very last iteration
+		}
+		if pinger.RandomizePingDelay {
+			time.Sleep(time.Millisecond * time.Duration(rand.IntN(_DEFAULT_MAX_DELAY_MS)))
+		} else {
+			time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
 		}
 	}
-	producer_inner_wg.Wait()
-	pinger.setPingerComplete()
-	end := time.Since(start)
-	pinger.Stats.TotalTime = end
-	close(pinger._log_stream_channel)
-	close(pinger._packet_channel)
 	return nil
 }
 
-func startPingConsumer(pinger *Pinger) error {
-	for packet := range pinger._packet_channel {
+func (pinger *Pinger) consume() {
+	for packet := range pinger.packetCh {
 		pinger.Stats.Packets = append(pinger.Stats.Packets, packet)
 	}
-	return nil
 }
 
 func (pinger *Pinger) IsPingComplete() bool {
-	return atomic.LoadInt32(&pinger._is_ping_done) == 1
+	return atomic.LoadInt32(&pinger.pingsDone) == 1
 }
 
 func (pinger *Pinger) setPingerComplete() {
-	atomic.StoreInt32(&pinger._is_ping_done, 1)
+	atomic.StoreInt32(&pinger.pingsDone, 1)
 }
 
-func (pinger *Pinger) logToStreamChannel(data string) {
-	var mu sync.Mutex
-	mu.Lock()
-	pinger._log_stream_channel <- data
-	mu.Unlock()
+func (pinger *Pinger) logToStreamChannel(line string) {
+	pinger.logCh <- line
 }
 
-// need to work on this pinger channel to gracefully handle the incoming data
+// StreamLog returns a channel of human-readable progress lines, closed once
+// PingAll finishes sending every request.
 func (pinger *Pinger) StreamLog() <-chan string {
-	return pinger._log_stream_channel
+	return pinger.logCh
+}
+
+// SetNetwork restricts (or, with "ip", restores) which address families are
+// resolved and pinged: "ip" for both v4 and v6 (the default), "ip4" for
+// IPv4 only, "ip6" for IPv6 only. Must be called before the addresses are
+// used (i.e. right after NewPinger, before PingAll) since it doesn't
+// re-resolve on its own.
+func (pinger *Pinger) SetNetwork(network string) *Pinger {
+	switch network {
+	case "ip", "ip4", "ip6":
+		pinger.Network = network
+	}
+	return pinger
 }
 
 func (pinger *Pinger) SetParallelPing(parallel bool) *Pinger {
-	// explicitly sets the ping to run in parallel
 	pinger.IsSequential = !parallel
 	return pinger
 }
 
-func (pinger *Pinger) SetPayloadSizeInBytes(payload_size int) *Pinger {
-	// explicitly sets the size of the ping requests within boundary of _DEFAULT_MAX_PAYLOAD_SIZE
-	// returns nil
-	pinger.Payload = strings.Repeat("d", payload_size%_DEFAULT_MAX_PAYLOAD_SIZE)
+// SetPayloadSizeInBytes sets the echo payload size, clamped to
+// _DEFAULT_MAX_PAYLOAD_SIZE rather than wrapped: requesting exactly (or a
+// multiple of) the max used to silently produce an empty payload instead.
+func (pinger *Pinger) SetPayloadSizeInBytes(payloadSize int) *Pinger {
+	if payloadSize < 0 {
+		payloadSize = 0
+	}
+	if payloadSize > _DEFAULT_MAX_PAYLOAD_SIZE {
+		payloadSize = _DEFAULT_MAX_PAYLOAD_SIZE
+	}
+	pinger.Payload = []byte(repeatByte('d', payloadSize))
 	return pinger
 }
 
 func (pinger *Pinger) SetPingCount(count int) *Pinger {
-	// explicitly set ping count. Checks if set below 0, then converts to absolute
-	// default is usually 4 as defined in _DEFAULT_PING_COUNT
-	// returns nil
 	if count < 0 {
-		count *= -1
-	} else if count > _DEFAULT_MAX_PING_COUNT {
-		pinger.Count = _DEFAULT_MAX_PING_COUNT
-		return pinger
+		count = -count
+	}
+	if count > _DEFAULT_MAX_PING_COUNT {
+		count = _DEFAULT_MAX_PING_COUNT
 	}
 	pinger.Count = count
 	return pinger
 }
 
-func (pinger *Pinger) SetResolveTimeout(timeout int) *Pinger {
-	// explicitly set ping delay. Checks for timeout less than 0ms
-	// default is usually 5000ms as defined in _DEFAULT_RESOLVE_TIMEOUT_MS, hence sets if timeout <0
-	if timeout < 0 {
-		pinger.ResolveTimeout = _DEFAULT_RESOLVE_TIMEOUT_MS
-	} else {
-		pinger.ResolveTimeout = timeout
+func (pinger *Pinger) SetResolveTimeout(timeoutMS int) *Pinger {
+	if timeoutMS < 0 {
+		timeoutMS = _DEFAULT_RESOLVE_TIMEOUT_MS
 	}
+	pinger.ResolveTimeoutMS = timeoutMS
 	return pinger
 }
 
-func (pinger *Pinger) SetPingDelayInMS(delay int) *Pinger {
-	// explicitly set ping delay. Checks for delay
-	// default is usually 1000ms as defined in _DEFAULT_PING_DELAY_MS, hence sets if delay <=0
-	if delay < 0 {
-		pinger.PingDelay = _DEFAULT_PING_DELAY_MS
-	} else {
-		pinger.PingDelay = delay
+func (pinger *Pinger) SetPingDelayInMS(delayMS int) *Pinger {
+	if delayMS < 0 {
+		delayMS = _DEFAULT_PING_DELAY_MS
 	}
+	pinger.PingDelay = delayMS
 	return pinger
 }
 
-func (pinger *Pinger) SetTTL(ttl int) *Pinger {
-	pinger.TTL = ttl
+// SetReplyTimeoutInMS sets how long a single echo request waits for its
+// reply before being counted as lost. Replaces the pre-2.0 SetTTL, which
+// set this same value under a name that implied it was the IP-level hop
+// limit; it never was.
+func (pinger *Pinger) SetReplyTimeoutInMS(timeoutMS int) *Pinger {
+	if timeoutMS <= 0 {
+		timeoutMS = _DEFAULT_REPLY_TIMEOUT_MS
+	}
+	pinger.ReplyTimeoutMS = timeoutMS
 	return pinger
 }
 
 func (pinger *Pinger) SetRandomizedPingDelay(random bool) *Pinger {
-	// explicitly set if ping delay should be randomized
-	// returns nil
 	pinger.RandomizePingDelay = random
 	return pinger
 }
 
 func (p *Pinger) String() string {
-	// returns json representation of the pinger object
-	if str, err := json.Marshal(p); err != nil {
-		log.Fatal(err)
+	str, err := json.Marshal(p)
+	if err != nil {
 		return err.Error()
-	} else {
-		return string(str)
 	}
+	return string(str)
 }
 
+// resolveName resolves DestinationStr per Network and records the outcome
+// (address list, timing, or timeout) on Stats.
 func (pinger *Pinger) resolveName(destination string) error {
-	// method resolves the name against a timeout defined in ResolveTimeout
-	// also populates basic properties like
-	// - resolved addresses and
-	// - time taken to resolve
-	// - if timed out to resolve, marks resolvedtimedout to true
-	// - returns error if error encountered while resolve execution
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(pinger.ResolveTimeout))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(pinger.ResolveTimeoutMS))
 	defer cancel()
 	start := time.Now()
-	addr, err := net.DefaultResolver.LookupIP(ctx, _DEFAULT_NETWORK, destination)
+	addrs, err := net.DefaultResolver.LookupIP(ctx, pinger.Network, destination)
 	if err != nil {
-		pinger.Stats.ResolveTime = time.Duration(time.Since(start).Milliseconds())
+		pinger.Stats.ResolveTime = time.Since(start)
 		pinger.Stats.ResolveTimedOut = true
-		pinger.logToStreamChannel("Unable to resolve for " + destination + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data")
 		return err
 	}
-	pinger.Destination = addr
-	pinger.Stats.ResolveTime = time.Duration(time.Since(start).Milliseconds())
+	pinger.Destination = addrs
+	pinger.Stats.ResolveTime = time.Since(start)
 	pinger.Stats.ResolveTimedOut = false
-
 	return nil
+}
+
+func repeatByte(b byte, n int) []byte {
+	out := make([]byte, n)
+	for i := range out {
+		out[i] = b
+	}
+	return out
 }

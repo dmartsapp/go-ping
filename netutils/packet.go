@@ -2,13 +2,10 @@ package netutils
 
 import (
 	"net"
-	"runtime"
 	"strconv"
-	"sync"
 	"time"
 
 	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
 )
 
 type ICMPPacket struct {
@@ -21,152 +18,90 @@ type ICMPPacket struct {
 	ErrorStr            string     `json:"error_string"`
 }
 
-func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
-	var mu sync.Mutex
-	time.Sleep(time.Millisecond * time.Duration(pinger.PingDelay))
-	icmppacket := ICMPPacket{
-		Destination: net.IPAddr{
-			IP: destination,
-		},
-		Sequence:         seq,
-		PayloadSize:      len(pinger.Payload),
-		SentDateTimeUNIX: time.Now().UnixMilli(),
-	}
-	var icmpconn *icmp.PacketConn
-	var err error
+// fail records a failed/lost packet and hands it to the packet channel. It's
+// the one place sendICMP gives up on a request, so every "record a loss and
+// stop" path below reduces to a single call instead of five near-duplicates.
+func (pinger *Pinger) fail(packet ICMPPacket, err error) {
+	packet.ErrorEncountered = true
+	packet.ErrorStr = err.Error()
+	pinger.Stats.addLoss()
+	pinger.packetCh <- packet
+}
 
-	// Start listening for icmp replies
-	if runtime.GOOS == "windows" {
-		if icmpconn, err = icmp.ListenPacket("ip4:icmp", _DEFAULT_LISTEN_ADDRESS); err != nil {
-			icmppacket.ErrorEncountered = true
-			pinger.Stats.Loss += 1
-			icmppacket.ErrorStr = err.Error()
-			mu.Lock()
-			pinger._packet_channel <- icmppacket
-			mu.Unlock()
-			return
-		}
-		defer icmpconn.Close()
-	} else {
-		if icmpconn, err = icmp.ListenPacket("udp4", _DEFAULT_LISTEN_ADDRESS); err != nil {
-			icmppacket.ErrorEncountered = true
-			pinger.Stats.Loss += 1
-			icmppacket.ErrorStr = err.Error()
-			mu.Lock()
-			pinger._packet_channel <- icmppacket
-			mu.Unlock()
-			return
-		}
-		defer icmpconn.Close()
+// sendICMP sends one ICMP echo request to destination and waits for its
+// reply (or the pinger's reply timeout), dispatching to ICMPv4 or ICMPv6
+// automatically based on the destination's own address family - the two
+// protocols agree closely enough at the golang.org/x/net/icmp level that a
+// single implementation, parameterized by *icmpFamily, covers both.
+func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
+	family := familyFor(destination)
+	packet := ICMPPacket{
+		Destination: net.IPAddr{IP: destination},
+		Sequence:    seq,
+		PayloadSize: len(pinger.Payload),
 	}
-	// Make a new ICMP message
-	msg := icmp.Message{
-		Type: ipv4.ICMPTypeEcho, Code: 0,
-		Body: &icmp.Echo{
-			ID:   seq & 0xffff,
-			Seq:  seq,                    //<< uint(seq), // TODO
-			Data: []byte(pinger.Payload), // 4 bytes per char
-		},
-	}
-	msg_bytes, err := msg.Marshal(nil)
+
+	conn, err := icmp.ListenPacket(family.network(), family.listenAddr)
 	if err != nil {
-		icmppacket.ErrorEncountered = true
-		pinger.Stats.Loss += 1
-		icmppacket.ErrorStr = err.Error()
-		mu.Lock()
-		pinger._packet_channel <- icmppacket
-		mu.Unlock()
+		packet.SentDateTimeUNIX = time.Now().UnixMilli()
+		pinger.fail(packet, err)
 		return
 	}
-	// _stream_channel <- "Sending request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-	if runtime.GOOS == "windows" {
-		_, err := icmpconn.WriteTo(msg_bytes, &net.IPAddr{IP: destination})
-		if err != nil {
-			icmppacket.ErrorEncountered = true
-			pinger.Stats.Loss += 1
-			icmppacket.ErrorStr = err.Error()
-			mu.Lock()
-			pinger._log_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-			pinger._packet_channel <- icmppacket
-			mu.Unlock()
-			return
-		}
-	} else {
-		_, err = icmpconn.WriteTo(msg_bytes, &net.UDPAddr{IP: destination})
-		icmppacket.SentDateTimeUNIX = time.Now().UnixMilli()
-		if err != nil {
-			icmppacket.ErrorEncountered = true
-			pinger.Stats.Loss += 1
-			icmppacket.ErrorStr = err.Error()
-			mu.Lock()
-			pinger._log_stream_channel <- "Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data"
-			pinger._packet_channel <- icmppacket
-			mu.Unlock()
-			return
-		}
+	defer func() { _ = conn.Close() }()
+
+	msg := icmp.Message{
+		Type: family.echoRequestType,
+		Code: 0,
+		Body: &icmp.Echo{
+			ID:   seq & 0xffff,
+			Seq:  seq,
+			Data: pinger.Payload,
+		},
+	}
+	msgBytes, err := msg.Marshal(nil)
+	if err != nil {
+		packet.SentDateTimeUNIX = time.Now().UnixMilli()
+		pinger.fail(packet, err)
+		return
 	}
 
+	packet.SentDateTimeUNIX = time.Now().UnixMilli()
+	if _, err = conn.WriteTo(msgBytes, &net.UDPAddr{IP: destination}); err != nil {
+		pinger.logToStreamChannel("error sending request #" + strconv.Itoa(seq) + " to " + destination.String() + ": " + err.Error())
+		pinger.fail(packet, err)
+		return
+	}
+
+	buf := make([]byte, pinger.MTU)
 	for {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			break
-		}
-		// Wait for a reply
-		reply := make([]byte, _DEFAULT_MTU)
-		err = icmpconn.SetReadDeadline(time.Now().Add(time.Duration(pinger.TTL) * time.Millisecond))
-		if err != nil {
-			icmppacket.ErrorEncountered = true
-			pinger.Stats.Loss += 1
-			icmppacket.ErrorStr = err.Error()
-
-			pinger.logToStreamChannel("Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data")
-			mu.Lock()
-			pinger._packet_channel <- icmppacket
-			mu.Unlock()
-			return
-		}
-		n, _, err := icmpconn.ReadFrom(reply)
-		if err != nil {
-			icmppacket.ErrorEncountered = true
-			pinger.Stats.Loss += 1
-			icmppacket.ErrorStr = err.Error()
-
-			pinger.logToStreamChannel("Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data")
-			mu.Lock()
-			pinger._packet_channel <- icmppacket
-			mu.Unlock()
+		if err := conn.SetReadDeadline(time.Now().Add(time.Duration(pinger.ReplyTimeoutMS) * time.Millisecond)); err != nil {
+			pinger.fail(packet, err)
 			return
 		}
 
-		rm, err := icmp.ParseMessage(1, reply[:n])
+		n, _, err := conn.ReadFrom(buf)
 		if err != nil {
-			icmppacket.ErrorEncountered = true
-			pinger.Stats.Loss += 1
-			icmppacket.ErrorStr = err.Error()
-
-			pinger.logToStreamChannel("Error encountered for request #" + strconv.Itoa(seq) + " to " + destination.String() + " with " + strconv.Itoa(len(pinger.Payload)) + " bytes of data")
-			mu.Lock()
-			pinger._packet_channel <- icmppacket
-			mu.Unlock()
+			pinger.logToStreamChannel("no reply for request #" + strconv.Itoa(seq) + " from " + destination.String() + ": " + err.Error())
+			pinger.fail(packet, err)
 			return
 		}
-		switch rm.Type {
-		case ipv4.ICMPTypeEchoReply:
-			body, _ := rm.Body.Marshal(ipv4.ICMPTypeEchoReply.Protocol())
 
-			if int(body[3]) == seq {
-				icmppacket.ReceiveDateTimeUNIX = time.Now().UnixMilli()
-				// _stream_channel <- time.Now().Local().Format("12/12/2014 18:23:21") + ": Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data"
-				pinger.logToStreamChannel("Received response for request #" + strconv.Itoa(seq) + " from " + destination.String() + " with " + strconv.Itoa(icmppacket.PayloadSize) + " bytes of data in " + strconv.FormatFloat(float64(icmppacket.ReceiveDateTimeUNIX-icmppacket.SentDateTimeUNIX)/1, 'f', 0, 64) + "ms")
-				mu.Lock()
-				pinger._packet_channel <- icmppacket
-				mu.Unlock()
-				return
-			} else { // sequence mismatch, look for another packet to match
-				continue
-			}
-
-			// default:
-			// 	return dst, 0, fmt.Errorf("%v %+v", peer, rm.Type)
+		reply, err := icmp.ParseMessage(family.protocolNumber, buf[:n])
+		if err != nil {
+			pinger.fail(packet, err)
+			return
 		}
+		if reply.Type != family.echoReplyType {
+			continue // some other ICMP traffic on the same socket; keep waiting
+		}
+		echo, ok := reply.Body.(*icmp.Echo)
+		if !ok || echo.Seq != seq {
+			continue // reply to a different request sharing this socket's address; keep waiting
+		}
+
+		packet.ReceiveDateTimeUNIX = time.Now().UnixMilli()
+		pinger.logToStreamChannel("received reply for request #" + strconv.Itoa(seq) + " from " + destination.String() + " (" + family.name + ") in " + strconv.Itoa(int(packet.ReceiveDateTimeUNIX-packet.SentDateTimeUNIX)) + "ms")
+		pinger.packetCh <- packet
+		return
 	}
 }
