@@ -66,7 +66,7 @@ func (pinger *Pinger) sendICMP(destination net.IP, seq int) {
 	}
 
 	packet.SentDateTimeUNIX = time.Now().UnixMilli()
-	if _, err = conn.WriteTo(msgBytes, &net.UDPAddr{IP: destination}); err != nil {
+	if _, err = conn.WriteTo(msgBytes, family.writeAddr(destination)); err != nil {
 		pinger.logToStreamChannel("error sending request #" + strconv.Itoa(seq) + " to " + destination.String() + ": " + err.Error())
 		pinger.fail(packet, err)
 		return

@@ -81,3 +81,15 @@ func (f *icmpFamily) network() string {
 	}
 	return f.unprivilegedNet
 }
+
+// writeAddr returns the net.Addr PacketConn.WriteTo needs for a given
+// destination on this platform: a raw ICMP socket (Windows, always) expects
+// a *net.IPAddr, while an unprivileged ICMP datagram socket (everywhere
+// else) expects a *net.UDPAddr - passing the wrong one doesn't error
+// immediately, it just results in every request silently going unanswered.
+func (f *icmpFamily) writeAddr(destination net.IP) net.Addr {
+	if runtime.GOOS == "windows" {
+		return &net.IPAddr{IP: destination}
+	}
+	return &net.UDPAddr{IP: destination}
+}

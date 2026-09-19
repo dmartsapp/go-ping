@@ -131,7 +131,7 @@ func pingLoopbackOrSkip(t *testing.T, host string) *Pinger {
 func TestPingAllIPv4Loopback(t *testing.T) {
 	pinger := pingLoopbackOrSkip(t, "127.0.0.1")
 	if pinger.Stats.Loss > 0 {
-		t.Errorf("Loss = %d, want 0 pinging IPv4 loopback", pinger.Stats.Loss)
+		t.Errorf("Loss = %d, want 0 pinging IPv4 loopback; errors: %v", pinger.Stats.Loss, packetErrors(pinger))
 	}
 	if len(pinger.Stats.Packets) != 2 {
 		t.Errorf("got %d packets, want 2", len(pinger.Stats.Packets))
@@ -141,11 +141,21 @@ func TestPingAllIPv4Loopback(t *testing.T) {
 func TestPingAllIPv6Loopback(t *testing.T) {
 	pinger := pingLoopbackOrSkip(t, "::1")
 	if pinger.Stats.Loss > 0 {
-		t.Errorf("Loss = %d, want 0 pinging IPv6 loopback", pinger.Stats.Loss)
+		t.Errorf("Loss = %d, want 0 pinging IPv6 loopback; errors: %v", pinger.Stats.Loss, packetErrors(pinger))
 	}
 	if len(pinger.Stats.Packets) != 2 {
 		t.Errorf("got %d packets, want 2", len(pinger.Stats.Packets))
 	}
+}
+
+func packetErrors(pinger *Pinger) []string {
+	var errs []string
+	for _, p := range pinger.Stats.Packets {
+		if p.ErrorEncountered {
+			errs = append(errs, p.ErrorStr)
+		}
+	}
+	return errs
 }
 
 func TestPingAllParallelModeNoRace(t *testing.T) {
