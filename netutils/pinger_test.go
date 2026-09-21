@@ -4,6 +4,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewPingerResolvesLiteralIPv4(t *testing.T) {
@@ -213,4 +214,76 @@ func mustNewPinger(t *testing.T, host string) *Pinger {
 		t.Fatalf("NewPinger(%q) error: %v", host, err)
 	}
 	return pinger
+}
+
+// A reply that belongs to another ping must never satisfy this one. Every ICMP
+// socket on macOS (and every raw socket) is handed every echo reply the host
+// receives, and requests used to carry identifier seq & 0xffff - the same number
+// for the first request of every ping - so a ping to an address nobody answers
+// (TEST-NET-1, RFC 5737) succeeded whenever another ping got a reply.
+func TestReplyToAnotherPingIsNotAccepted(t *testing.T) {
+	// Six rounds: before the fix a round was fooled about nine times in ten.
+	for round := 1; round <= 6; round++ {
+		victim := mustNewPinger(t, "192.0.2.1")
+		victim.SetPingCount(1).SetReplyTimeoutInMS(1200)
+		neighbour := mustNewPinger(t, "127.0.0.1")
+		neighbour.SetPingCount(1).SetReplyTimeoutInMS(1200)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			time.Sleep(200 * time.Millisecond) // its reply lands while the victim is still waiting
+			_ = neighbour.PingAll()
+		}()
+		if err := victim.PingAll(); err != nil {
+			t.Fatalf("PingAll error: %v", err)
+		}
+		<-done
+		victim.MeasureStats()
+		neighbour.MeasureStats()
+		if neighbour.Stats.Loss == 1 {
+			t.Skipf("unprivileged ICMP not available here: %v", packetErrors(neighbour))
+		}
+		if victim.Stats.Loss != 1 {
+			t.Fatalf("round %d: a ping to an address nobody answers succeeded (loss %d): it took another ping's reply as its own", round, victim.Stats.Loss)
+		}
+	}
+}
+
+// Two destinations of one Pinger, pinged in parallel with the same sequence
+// number: the dead one must not adopt the live one's reply.
+func TestParallelDestinationsDoNotAdoptEachOthersReplies(t *testing.T) {
+	for round := 1; round <= 3; round++ {
+		pinger := mustNewPinger(t, "127.0.0.1")
+		pinger.Destination = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("192.0.2.1")}
+		pinger.SetPingCount(1).SetParallelPing(true).SetReplyTimeoutInMS(1000)
+		if err := pinger.PingAll(); err != nil {
+			t.Fatalf("PingAll error: %v", err)
+		}
+		pinger.MeasureStats()
+		answered := map[string]bool{}
+		for _, p := range pinger.Stats.Packets {
+			answered[p.Destination.IP.String()] = !p.ErrorEncountered
+		}
+		if !answered["127.0.0.1"] {
+			t.Skipf("unprivileged ICMP not available here: %v", packetErrors(pinger))
+		}
+		if answered["192.0.2.1"] {
+			t.Fatalf("round %d: 192.0.2.1 was reported as answering, with the reply that belonged to 127.0.0.1", round)
+		}
+	}
+}
+
+func TestEchoIDsAreUniquePerRequest(t *testing.T) {
+	seen := map[int]bool{}
+	for i := 0; i < 1000; i++ {
+		id := nextEchoID()
+		if id < 0 || id > 0xffff {
+			t.Fatalf("id %d does not fit the 16-bit ICMP field", id)
+		}
+		if seen[id] {
+			t.Fatalf("id %d handed out twice within 1000 requests", id)
+		}
+		seen[id] = true
+	}
 }

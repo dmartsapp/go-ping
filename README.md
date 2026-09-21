@@ -83,6 +83,10 @@ An environment with IPv6 disabled entirely (common in some minimal containers) w
 
 ## Changelog
 
+### v2.0.1
+
+- **Fixed a reply to one ping being accepted as the reply to another.** A request matched a reply on its sequence number alone, and every request's ICMP identifier was `seq & 0xffff` - the same number for the first request of every ping. On macOS, and on raw sockets (Windows, privileged Linux), every ICMP socket is handed every echo reply the host receives, so while one ping was getting replies a ping to an address that never answers could succeed with the other's reply. It also happened inside one `PingAll`: with two destinations pinged in parallel, the dead one could adopt the live one's reply. Every echo request now carries its own identifier (counted up from a random start, so it is also different between processes) and a reply is accepted only if it carries the identifier that request sent. On Linux's unprivileged ICMP sockets the kernel replaces the identifier with the socket's port and already delivers a socket only its own replies, so nothing is compared there. No API change.
+
 ### v2.0.0
 
 - **Added IPv6 support.** `Pinger.Destination` can now hold a mix of IPv4 and IPv6 addresses (from a dual-stack resolution, or set manually), and each is pinged with the ICMP protocol matching its own family. `NewPinger` resolves both families by default (`SetNetwork` to restrict to one).
