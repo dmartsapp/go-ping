@@ -1,12 +1,24 @@
-# TODO - planned for shint v4.4.0
+# TODO - two phases, v4.4.0 and v4.5.0
 
-A tracking page, not a design doc: what shint's `ping` command needs from this
-library that it does not have yet, gathered here so the rewiring shint's
-v4.4.0 milestone already calls for happens once, deliberately, instead of
-piecemeal. Each item below is verified against the current source (this
-branch's base, `main` at `d13489e`), not assumed - file:line references are
-real, not recalled. Nothing here is implemented; this branch exists to hold
-the list until work starts.
+A tracking page, not a design doc. Nothing here is implemented; this branch
+exists to hold the list until each phase's work actually starts.
+
+**Phase 1 (v4.4.0)**: what shint's `ping` command needs from this library
+that it does not have yet - concrete, scoped, verified gaps, gathered here so
+the rewiring shint's v4.4.0 milestone already calls for happens once,
+deliberately, instead of piecemeal. Each item below is verified against the
+current source (this branch's base, `main` at `d13489e`), not assumed -
+file:line references are real, not recalled.
+
+**Phase 2 (v4.5.0), logged 2026-09-24**: a parallel overhaul of this library,
+run alongside shint's own v4.5.0 work, to bring its naming and design
+patterns in line with what shint v5.0.0 is expected to need - see "Looking
+further out" at the bottom of this page. This phase is a *sequencing*
+decision, not a design yet: what "standard naming and design pattern for
+shint v5" concretely means has not been worked out. Logged now so the two
+efforts (this library's v4.5.0 prep, shint's own v5.0.0 central-library work)
+are already pointing at each other before either starts, not stitched
+together after the fact.
 
 ## 1. `--timeout` cannot cover the DNS lookup (shint issue #14)
 
@@ -106,3 +118,24 @@ the most contained; #3 and #4 are related (both touch `ICMPPacket`/`fail`,
 worth doing together); #5 and #6 are newer, less scoped, and should probably
 get their own design pass before code, the way #5 got some real discussion
 on the shint side already.
+
+## Looking further out: shint v5.0.0's central library
+
+shint is considering pulling its own networking primitives (name resolution,
+the shared dial/port-check code, its DNS wire client, IP-family handling -
+currently its `lib` package) out into a standalone library, alongside - or
+merged with - this one. The appeal: this package is already proof that "an
+importable Go networking library, separate from the shint CLI" works, and a
+change like #5 above (interface/source binding) would otherwise need writing
+twice - once here for ICMP, once in shint's own `lib` for TCP/UDP/DNS -
+instead of once in a shared place. It also overlaps with a separate,
+still-unscheduled shint proposal (issue #47: a `Module` interface with
+shared run options and an output sink) - the two may turn out to be one
+effort, not two.
+
+This is a **v5.0.0** idea on the shint side, logged 2026-09-24, not designed.
+Phase 2 above (this library's v4.5.0 naming/pattern work) exists because of
+it: better to spend v4.5.0 moving this library's own shape closer to
+whatever the eventual merge needs, than to do the whole convergence in one
+large, risky step at v5.0.0 itself. What "closer" actually means is still
+open - revisit once shint's v4.5.0 planning is real, not before.
