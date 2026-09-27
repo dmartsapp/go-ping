@@ -1,4 +1,4 @@
-# TODO - two phases, v4.4.0 and v4.5.0
+# TODO - two phases, v4.4.0 and v4.6.0
 
 A tracking page, not a design doc. Nothing here is implemented; this branch
 exists to hold the list until each phase's work actually starts.
@@ -10,13 +10,15 @@ deliberately, instead of piecemeal. Each item below is verified against the
 current source (this branch's base, `main` at `d13489e`), not assumed -
 file:line references are real, not recalled.
 
-**Phase 2 (v4.5.0), logged 2026-09-24**: a parallel overhaul of this library,
-run alongside shint's own v4.5.0 work, to bring its naming and design
-patterns in line with what shint v5.0.0 is expected to need - see "Looking
+**Phase 2 (v4.6.0), logged 2026-09-24, moved from v4.5.0 on 2026-09-26**: a
+parallel overhaul of this library, run alongside shint's v4.6.0 - the
+optimization release, which builds shint's central networking library as an
+internal change (shint issue #70) - to bring its naming and design patterns
+in line with what that library needs - see "Looking
 further out" at the bottom of this page. This phase is a *sequencing*
 decision, not a design yet: what "standard naming and design pattern for
 shint v5" concretely means has not been worked out. Logged now so the two
-efforts (this library's v4.5.0 prep, shint's own v5.0.0 central-library work)
+efforts (this library's phase-2 prep, shint's own central-library work)
 are already pointing at each other before either starts, not stitched
 together after the fact.
 
@@ -133,9 +135,11 @@ still-unscheduled shint proposal (issue #47: a `Module` interface with
 shared run options and an output sink) - the two may turn out to be one
 effort, not two.
 
-This is a **v5.0.0** idea on the shint side, logged 2026-09-24, not designed.
-Phase 2 above (this library's v4.5.0 naming/pattern work) exists because of
-it: better to spend v4.5.0 moving this library's own shape closer to
-whatever the eventual merge needs, than to do the whole convergence in one
-large, risky step at v5.0.0 itself. What "closer" actually means is still
-open - revisit once shint's v4.5.0 planning is real, not before.
+On the shint side this was logged for v5.0.0 on 2026-09-24, and moved to
+**v4.6.0** on 2026-09-26 as an internal change (the command line and JSON
+unchanged; only what would break Go code importing shint's packages waits
+for v5.0.0). #47 moved to v4.6.0 with it. Phase 2 above (this library's
+naming/pattern work) exists because of it: better to move this library's own
+shape closer to whatever the shared library needs, in the same release, than
+to do the whole convergence in one large, risky step. What "closer" actually
+means is still open - revisit when shint's v4.6.0 work starts, not before.
